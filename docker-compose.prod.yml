@@ -1,0 +1,19 @@
+services:
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      APP_ENV: production
+      DEV_INSECURE_COOKIES: "0"
+      MINIO_SECURE: "true"
+      PUBLIC_URL: ${PUBLIC_URL:-https://localhost}
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      APP_ENV: production
+      DEV_INSECURE_COOKIES: "0"
+      MINIO_SECURE: "true"
+      PUBLIC_URL: ${PUBLIC_URL:-https://localhost}

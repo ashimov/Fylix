@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# Node
+node_modules/
+dist/
+.vite/
+
+# Env & secrets (NEVER commit)
+.env
+.env.local
+secrets/*
+!secrets/.gitkeep
+*.key
+*.pem
+!nginx/certs/.gitkeep
+
+# Runtime data (bind-mounts)
+data/
+!data/.gitkeep
+!data/geoip/
+data/geoip/*
+!data/geoip/.gitkeep
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artefacts
+*.egg-info/
+build/

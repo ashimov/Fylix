@@ -1,0 +1,114 @@
+{
+  "uid": "fylix-queues",
+  "title": "Fylix — Worker queues & DLQ",
+  "tags": ["fylix", "worker"],
+  "timezone": "",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "templating": { "list": [] },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Live queue depth (upload:ready, email:queue)",
+      "description": "Redis LLEN observed at scrape time. Rising trend without worker progress = encrypt/email slowdown.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "fylix_worker_queue_depth{queue=\"upload:ready\"}",
+          "legendFormat": "upload:ready",
+          "refId": "A"
+        },
+        {
+          "expr": "fylix_worker_queue_depth{queue=\"email:queue\"}",
+          "legendFormat": "email:queue",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "short", "custom": { "drawStyle": "line", "lineWidth": 2 } }
+      }
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Dead-letter queues (upload + email)",
+      "description": "Non-zero DLQ depth = failed jobs awaiting manual re-queue. Alert if > 50 for 5 min.",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "expr": "fylix_worker_queue_depth{queue=\"upload:ready:dlq\"}",
+          "legendFormat": "upload:ready:dlq",
+          "refId": "A"
+        },
+        {
+          "expr": "fylix_worker_queue_depth{queue=\"email:queue:dlq\"}",
+          "legendFormat": "email:queue:dlq",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 10 },
+              { "color": "red", "value": 50 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Current DLQ total",
+      "description": "Sum across upload + email DLQs.",
+      "gridPos": { "h": 5, "w": 8, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "expr": "sum(fylix_worker_queue_depth{queue=~\".*:dlq\"})",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 10 },
+              { "color": "red", "value": 50 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Upload queue depth now",
+      "gridPos": { "h": 5, "w": 8, "x": 8, "y": 8 },
+      "targets": [
+        { "expr": "fylix_worker_queue_depth{queue=\"upload:ready\"}", "refId": "A" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short" } }
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Email queue depth now",
+      "gridPos": { "h": 5, "w": 8, "x": 16, "y": 8 },
+      "targets": [
+        { "expr": "fylix_worker_queue_depth{queue=\"email:queue\"}", "refId": "A" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short" } }
+    }
+  ]
+}

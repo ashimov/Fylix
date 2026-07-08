@@ -1,0 +1,320 @@
+services:
+  nginx:
+    build: ./nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/certs:/etc/nginx/certs:ro
+    networks:
+      - web
+    depends_on:
+      - api
+      - frontend
+      - admin-frontend
+    restart: unless-stopped
+    mem_limit: 128m
+    cpus: "0.5"
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_HOST: postgres
+      REDIS_URL: redis://redis:6379/0
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_ENDPOINT: minio:9000
+      APP_ENV: ${APP_ENV:-development}
+      DEV_INSECURE_COOKIES: "1"
+      STAGING_DIR: /srv/fylix/staging
+      MASTER_KEY_PATH: /run/secrets/master_key
+      SMTP_HOST: ${SMTP_HOST:-mailpit}
+      SMTP_PORT: ${SMTP_PORT:-1025}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-no-reply@example.com}
+      SMTP_VERIFY_CERT: ${SMTP_VERIFY_CERT:-true}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      HCAPTCHA_SECRET: ${HCAPTCHA_SECRET:-}
+      HCAPTCHA_SITE_KEY: ${HCAPTCHA_SITE_KEY:-}
+      MAXMIND_DB_PATH: /srv/fylix/geoip/GeoLite2-Country.mmdb
+      RATE_LIMIT_CACHE_TTL: "0"
+      # OpenTelemetry — traces ship to Jaeger's OTLP gRPC receiver.
+      # Set OTEL_EXPORTER_OTLP_ENDPOINT to empty to disable (setup_otel no-ops).
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://jaeger:4317}
+      OTEL_SERVICE_NAME: fylix-api
+      OTEL_TRACES_SAMPLER_ARG: ${OTEL_TRACES_SAMPLER_ARG:-1.0}
+    volumes:
+      - ./data/staging:/srv/fylix/staging
+      - ./data/geoip:/srv/fylix/geoip:ro
+    secrets:
+      - master_key
+    networks:
+      - web
+      - data
+      - observability
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    restart: unless-stopped
+    mem_limit: 1g
+    cpus: "2"
+
+  frontend:
+    build: ./frontend
+    networks:
+      - web
+    restart: unless-stopped
+    mem_limit: 64m
+    cpus: "0.25"
+
+  admin-frontend:
+    build: ./admin-frontend
+    networks:
+      - web
+    restart: unless-stopped
+    mem_limit: 64m
+    cpus: "0.25"
+
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    command: ["/opt/venv/bin/python", "-m", "app.worker"]
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_HOST: postgres
+      REDIS_URL: redis://redis:6379/0
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_ENDPOINT: minio:9000
+      APP_ENV: ${APP_ENV:-development}
+      STAGING_DIR: /srv/fylix/staging
+      MASTER_KEY_PATH: /run/secrets/master_key
+      SMTP_HOST: ${SMTP_HOST:-mailpit}
+      SMTP_PORT: ${SMTP_PORT:-1025}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-no-reply@example.com}
+      SMTP_VERIFY_CERT: ${SMTP_VERIFY_CERT:-true}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      HCAPTCHA_SECRET: ${HCAPTCHA_SECRET:-}
+      HCAPTCHA_SITE_KEY: ${HCAPTCHA_SITE_KEY:-}
+      MAXMIND_DB_PATH: /srv/fylix/geoip/GeoLite2-Country.mmdb
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://jaeger:4317}
+      OTEL_SERVICE_NAME: fylix-worker
+      OTEL_TRACES_SAMPLER_ARG: ${OTEL_TRACES_SAMPLER_ARG:-1.0}
+    volumes:
+      - ./data/staging:/srv/fylix/staging
+      - ./data/geoip:/srv/fylix/geoip:ro
+    secrets:
+      - master_key
+    networks:
+      # web grants egress to corporate SMTP relay / Telegram / hCaptcha;
+      # data keeps internal-only services reachable.
+      - web
+      - data
+      - observability
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    restart: unless-stopped
+    mem_limit: 1g
+    cpus: "2"
+
+  postgres:
+    image: postgres:16-alpine
+    # Tuning for the 1GB / 1 CPU profile (mem_limit below).
+    # Rule of thumb on SSDs: shared_buffers ≈ 25% of mem_limit,
+    # effective_cache_size ≈ 75%. Connection pool sized for api + worker
+    # plus one admin session + headroom.
+    command:
+      - "postgres"
+      - "-c"
+      - "shared_buffers=256MB"
+      - "-c"
+      - "effective_cache_size=768MB"
+      - "-c"
+      - "max_connections=200"
+      - "-c"
+      - "work_mem=16MB"
+      - "-c"
+      - "maintenance_work_mem=64MB"
+      - "-c"
+      - "wal_buffers=16MB"
+      - "-c"
+      - "random_page_cost=1.1"
+      - "-c"
+      - "log_min_duration_statement=500"
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+    networks:
+      - data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    mem_limit: 1g
+    cpus: "1"
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - ./data/redis:/data
+    networks:
+      - data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+    mem_limit: 256m
+    cpus: "0.5"
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    volumes:
+      - ./data/minio:/data
+    networks:
+      - data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    mem_limit: 512m
+    cpus: "1"
+
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    networks:
+      - data
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 $${MINIO_ROOT_USER} $${MINIO_ROOT_PASSWORD} &&
+      mc mb --ignore-existing local/transfers &&
+      mc version suspend local/transfers &&
+      echo 'MinIO bucket ready.'"
+    restart: "no"
+
+  mailpit:
+    image: axllent/mailpit:latest
+    profiles: ["dev"]
+    ports:
+      - "8025:8025"
+    networks:
+      - web
+      - data
+    environment:
+      MP_MAX_MESSAGES: 500
+    restart: unless-stopped
+    mem_limit: 128m
+    cpus: "0.25"
+
+  # === Observability stack =================================================
+  # Jaeger all-in-one: OTLP receiver + in-memory span storage + UI. In prod,
+  # swap for jaeger-collector + ES/Cassandra + jaeger-query and CIDR-gate
+  # the UI via Nginx (same pattern as /admin).
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.60
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+      SPAN_STORAGE_TYPE: memory
+    ports:
+      - "16686:16686"  # UI (dev only; CIDR-gate in prod)
+    networks:
+      - observability
+    restart: unless-stopped
+    mem_limit: 512m
+    cpus: "0.5"
+
+  prometheus:
+    image: prom/prometheus:v2.55.0
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=30d"
+      - "--storage.tsdb.retention.size=2GB"
+      - "--web.enable-lifecycle"
+    volumes:
+      - ./observability/prometheus:/etc/prometheus:ro
+      - prometheus-data:/prometheus
+    networks:
+      - observability
+    restart: unless-stopped
+    mem_limit: 512m
+    cpus: "0.5"
+
+  grafana:
+    image: grafana/grafana:11.3.0
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "3000:3000"  # UI (CIDR-gate in prod)
+    depends_on:
+      - prometheus
+    networks:
+      - observability
+    restart: unless-stopped
+    mem_limit: 256m
+    cpus: "0.5"
+
+networks:
+  web:
+  data:
+    internal: true
+  # observability network is NOT internal so the Jaeger + Grafana UIs can
+  # publish host-port bindings for dev. Prod deploys must CIDR-gate both
+  # UIs at Nginx (same pattern as /admin and /metrics).
+  observability:
+
+volumes:
+  prometheus-data:
+  grafana-data:
+
+secrets:
+  master_key:
+    file: ./secrets/master_key

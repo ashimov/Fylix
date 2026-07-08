@@ -1,0 +1,110 @@
+name: Security scans
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  schedule:
+    # Weekly re-scan to catch newly-disclosed CVEs in dependencies.
+    - cron: "0 3 * * 1"
+
+jobs:
+  bandit:
+    name: Bandit (Python static analysis)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install "bandit[toml]>=1.7"
+      - name: Run bandit
+        working-directory: backend
+        run: |
+          bandit -c pyproject.toml -r app/ -f json -o bandit-report.json || true
+          bandit -c pyproject.toml -r app/ -ll -i
+        # -ll = show LOW severity and above
+        # -i  = show ISSUE confidence HIGH and above
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bandit-report
+          path: backend/bandit-report.json
+
+  pip-audit:
+    name: pip-audit (dependency CVEs)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install deps
+        working-directory: backend
+        run: uv sync --frozen
+      - name: Export requirements
+        working-directory: backend
+        run: uv export --frozen --no-dev > requirements-frozen.txt
+      - run: pip install pip-audit
+      - name: Run pip-audit
+        working-directory: backend
+        run: pip-audit -r requirements-frozen.txt --strict
+        # --strict means any vulnerability fails the build
+
+  semgrep:
+    name: Semgrep (OWASP + language rulesets)
+    runs-on: ubuntu-latest
+    container:
+      image: returntocorp/semgrep
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          semgrep scan \
+            --config=p/python \
+            --config=p/security-audit \
+            --config=p/owasp-top-ten \
+            --sarif --output=semgrep.sarif \
+            --error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: semgrep-sarif
+          path: semgrep.sarif
+
+  trivy:
+    name: Trivy (container image scan)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build api prod image
+        run: docker build -f backend/Dockerfile -t fylix-api:prod backend/
+      - name: Build frontend image
+        run: docker build -t fylix-frontend:prod frontend/
+      - name: Build admin-frontend image
+        run: docker build -t fylix-admin-frontend:prod admin-frontend/
+      - name: Scan api image
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: fylix-api:prod
+          format: table
+          exit-code: "1"
+          ignore-unfixed: true
+          severity: HIGH,CRITICAL
+      - name: Scan frontend image
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: fylix-frontend:prod
+          format: table
+          exit-code: "1"
+          ignore-unfixed: true
+          severity: HIGH,CRITICAL
+      - name: Scan admin-frontend image
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: fylix-admin-frontend:prod
+          format: table
+          exit-code: "1"
+          ignore-unfixed: true
+          severity: HIGH,CRITICAL

@@ -1,0 +1,53 @@
+{
+  "uid": "fylix-traces-overview",
+  "title": "Fylix — Upload throughput & tracing links",
+  "tags": ["fylix", "traces", "throughput"],
+  "timezone": "",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "templating": { "list": [] },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Upload throughput (proxy: queue arrivals / min)",
+      "description": "There is no per-request counter yet — this panel approximates upload arrivals by the positive derivative of upload:ready depth. Spikes with matching dips in depth = healthy encrypt pipeline. Sustained high depth without dips = worker starved.",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "max(0, deriv(fylix_worker_queue_depth{queue=\"upload:ready\"}[5m]) * 60)",
+          "legendFormat": "upload arrivals / min",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": { "drawStyle": "bars", "lineWidth": 1, "fillOpacity": 50 }
+        }
+      }
+    },
+    {
+      "id": 2,
+      "type": "text",
+      "title": "Distributed tracing → Jaeger",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "options": {
+        "mode": "markdown",
+        "content": "# Per-request latency via Jaeger\n\nCrypto-pipeline latency — MinIO put, AES-GCM streaming, SMTP retry — is traced through **OpenTelemetry spans** rather than aggregated in Prometheus histograms. Open the Jaeger UI to drill into any single transfer:\n\n- Jaeger UI: [http://localhost:16686](http://localhost:16686) (dev only; CIDR-gated in prod)\n- Services: `fylix-api`, `fylix-worker`\n- Filter by `X-Request-Id` header value (echoed in the span `attributes.request_id`) to correlate a failed download with its encrypt job.\n- SQLAlchemy / Redis / httpx spans are auto-instrumented; MinIO object I/O needs manual spans (planned)."
+      }
+    },
+    {
+      "id": 3,
+      "type": "text",
+      "title": "What to add next",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "options": {
+        "mode": "markdown",
+        "content": "# Metrics gaps\n\nThis dashboard uses the two metrics we have (`fylix_worker_queue_depth`, `fylix_cleanup_last_run_timestamp`) plus OTel traces. To get richer dashboards, add these counters/histograms in `backend/app/routers/metrics.py`:\n\n- `fylix_transfers_created_total{status}` — Counter, incremented in `POST /api/transfers` handler.\n- `fylix_download_bytes_total` — Counter, incremented in `StreamingResponse` body generator.\n- `fylix_encrypt_duration_seconds` — Histogram, wrap `encrypt_stream` call in worker.\n- `fylix_admin_login_attempts_total{outcome}` — Counter for security alerting (brute-force detection)."
+      }
+    }
+  ]
+}

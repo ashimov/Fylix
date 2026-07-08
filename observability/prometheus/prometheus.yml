@@ -1,0 +1,33 @@
+# Prometheus scrape config for Fylix.
+#
+# The api exposes `/metrics` (see backend/app/routers/metrics.py) with:
+#   fylix_worker_queue_depth{queue=...}   — Redis LLEN per worker queue
+#   fylix_cleanup_last_run_timestamp       — unix ts of last cleanup tick
+#
+# In prod, Grafana + Prometheus UIs are CIDR-gated at Nginx. Here they're
+# on the internal `observability` docker network, reachable only from
+# api/worker and each other.
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    service: fylix
+
+scrape_configs:
+  - job_name: fylix-api
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["api:8000"]
+        labels:
+          component: api
+
+  # Prometheus self-scrape (cheap, useful for the "is Prometheus alive"
+  # uptime query in Grafana).
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+# Alertmanager wiring + alert rules live separately — add them in
+# Phase 3 after SLO.md lands (99.5% upload success, cleanup-heartbeat-age
+# < 10 min, DLQ depth < 50).

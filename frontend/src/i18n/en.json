@@ -1,0 +1,45 @@
+{
+  "app": {
+    "name": "Fylix",
+    "tagline": "Secure file exchange"
+  },
+  "nav": { "darkMode": "Dark mode", "language": "Language" },
+  "upload": {
+    "title": "Send files",
+    "drop": "Drag files here or click to select",
+    "senderEmail": "Your email",
+    "recipientEmails": "Recipient emails",
+    "message": "Message to recipient (optional)",
+    "ttl": "Link expiry",
+    "ttlDays": "{n} d.",
+    "send": "Send",
+    "cancel": "Cancel",
+    "uploading": "Uploading: {percent}%",
+    "limits": "Maximum {gb} GB, up to {days} days"
+  },
+  "success": {
+    "title": "Files sent",
+    "message": "A link has been sent to the recipient. You can also copy it below.",
+    "downloadLink": "Download link",
+    "copy": "Copy",
+    "copied": "Copied",
+    "sendAnother": "Send another"
+  },
+  "legal": {
+    "title": "Privacy policy and terms",
+    "cookieBanner": "This service stores IP addresses, emails and file metadata for audit and security purposes. By continuing, you agree.",
+    "accept": "Accept",
+    "body": "Full text will be added before launch."
+  },
+  "errors": {
+    "notFound": "Page not found",
+    "network": "No connection. Please try again later.",
+    "invalidEmail": "Invalid email",
+    "senderEmailRequired": "Please enter your email",
+    "tooManyRecipients": "Maximum {n} recipients",
+    "fileTooLarge": "File too large (maximum {gb} GB)"
+  },
+  "footer": {
+    "copyright": "© Fylix — secure file exchange"
+  }
+}

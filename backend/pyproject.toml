@@ -1,0 +1,84 @@
+[project]
+name = "fylix-backend"
+version = "0.1.0"
+description = "Fylix backend — HawkAPI + worker"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "argon2-cffi==23.1.*",
+    "aiohttp==3.10.*",
+    "aiosmtplib==3.0.*",
+    "alembic==1.13.*",
+    "apscheduler==3.10.*",
+    "asyncpg==0.30.*",
+    "cryptography==43.0.*",
+    "email-validator==2.2.*",
+    "hawkapi[pydantic,otel]>=0.1.5,<0.2",
+    # OTLP gRPC exporter + auto-instrumentation for the deps hawkapi doesn't
+    # wrap: sqlalchemy (DB spans), redis (queue + rate-limit I/O), httpx
+    # (outbound hCaptcha / Telegram / defender polls).
+    "opentelemetry-exporter-otlp-proto-grpc>=1.41,<2",
+    "opentelemetry-instrumentation-sqlalchemy>=0.62b0,<1",
+    "opentelemetry-instrumentation-redis>=0.62b0,<1",
+    "opentelemetry-instrumentation-httpx>=0.62b0,<1",
+    "libcst>=1.8,<2",
+    "geoip2==4.8.*",
+    "httpx==0.27.*",
+    "jinja2==3.1.*",
+    "minio==7.2.*",
+    "prometheus-client==0.21.*",
+    "pydantic==2.9.*",
+    "pydantic-settings==2.6.*",
+    "pyotp==2.9.*",
+    "python-magic==0.4.*",
+    "redis==5.2.*",
+    "sentry-sdk[fastapi,sqlalchemy,httpx]>=2.18,<3",
+    "sqlalchemy[asyncio]==2.0.*",
+    "stream-zip==0.0.83",
+    "structlog==24.4.*",
+    "uvicorn[standard]==0.32.*",
+]
+
+[dependency-groups]
+dev = [
+    "mypy==1.13.*",
+    "pytest==8.3.*",
+    "pytest-asyncio==0.24.*",
+    "pytest-httpserver==1.1.*",
+    "ruff==0.7.*",
+    "testcontainers[postgres,redis,minio]==4.8.*",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "S", "A", "C4", "SIM", "PL"]
+ignore = ["S101"]  # allow asserts in tests
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S105", "S106", "PLR2004", "S501", "E501"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+markers = [
+    "integration: tests that require a running docker-compose stack",
+]
+filterwarnings = [
+    # pytest-asyncio 0.24 introspects our custom session-scoped event_loop
+    # fixture via inspect.getsourcelines() and fails with "could not get
+    # source code" — pluggy then converts the teardown exception to an
+    # error. The fixture itself works correctly; silence the noise.
+    "ignore::pluggy.PluggyTeardownRaisedWarning",
+]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+ignore_missing_imports = true
+
+[tool.bandit]
+exclude_dirs = ["tests", "alembic"]
+skips = []

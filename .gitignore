@@ -22,11 +22,14 @@ secrets/*
 !nginx/certs/.gitkeep
 
 # Runtime data (bind-mounts)
-data/
+data/*
 !data/.gitkeep
 !data/geoip/
 data/geoip/*
 !data/geoip/.gitkeep
+!data/staging/
+data/staging/*
+!data/staging/.gitkeep
 
 # IDE
 .vscode/

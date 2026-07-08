@@ -37,6 +37,11 @@ else
   ./scripts/gen_dev_certs.sh
 fi
 
+# --- Runtime bind-mount dirs (must exist and be owned by you, not root) ---
+# If docker creates these itself they end up root-owned and the api container
+# (uid 1001) cannot write to the staging dir.
+mkdir -p data/staging data/geoip
+
 # --- Bring up the stack ---
 echo "Building and starting the docker compose stack (dev profile)..."
 docker compose --profile dev up -d --build

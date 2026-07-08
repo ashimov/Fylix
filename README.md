@@ -13,7 +13,8 @@
   <img src="https://img.shields.io/badge/MinIO-S3-C72E49?logo=minio&logoColor=white" alt="MinIO" />
   <img src="https://img.shields.io/badge/Redis-7-DC382D?logo=redis&logoColor=white" alt="Redis" />
   <img src="https://img.shields.io/badge/AES--256--GCM-envelope-0369a1" alt="Crypto" />
-  <img src="https://img.shields.io/badge/tests-351%20passing-22c55e" alt="Tests" />
+  <a href="https://github.com/ashimov/Fylix/actions/workflows/ci.yml"><img src="https://github.com/ashimov/Fylix/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI" /></a>
+  <a href="https://github.com/ashimov/Fylix/actions/workflows/security.yml"><img src="https://github.com/ashimov/Fylix/actions/workflows/security.yml/badge.svg?branch=main" alt="Security scans" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-yellow.svg" alt="MIT License" /></a>
 </p>
 

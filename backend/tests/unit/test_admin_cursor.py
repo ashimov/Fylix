@@ -2,6 +2,7 @@
 
 Cursor format `"<iso-ts>|<uuid>"` guarantees (ts, id) tuple comparison in the
 WHERE clause — a tie on `ts` no longer silently drops rows."""
+
 from __future__ import annotations
 
 from datetime import UTC, datetime

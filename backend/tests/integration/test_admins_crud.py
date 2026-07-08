@@ -1,18 +1,17 @@
 """Admins CRUD endpoints (list / create / update / reset-totp / delete)."""
+
 import os
-from uuid import UUID
 
 import httpx
 import pyotp
 import pytest
 from sqlalchemy import select, text
 
+from app.config import settings as app_settings
+from app.crypto import load_master_key
 from app.db import SessionLocal
 from app.models import Admin
-from app.services.auth import AuthService, is_wrapped_totp, unwrap_totp_secret
-from app.crypto import load_master_key
-from app.config import settings as app_settings
-
+from app.services.auth import AuthService, is_wrapped_totp
 
 BASE = os.environ.get("PUBLIC_URL", "http://localhost:8000")
 
@@ -36,20 +35,28 @@ async def _seed_and_login(
     secret = auth.generate_totp_secret()
     master = load_master_key(app_settings.master_key_path, enforce_perms=False)
     from app.services.auth import wrap_totp_secret
+
     async with SessionLocal() as s:
-        s.add(Admin(
-            email=email,
-            password_hash=auth.hash_password("StrongPw12345!"),
-            totp_secret=wrap_totp_secret(master, secret),
-            totp_enrolled=True,
-            role=role,
-            disabled=False,
-        ))
+        s.add(
+            Admin(
+                email=email,
+                password_hash=auth.hash_password("StrongPw12345!"),
+                totp_secret=wrap_totp_secret(master, secret),
+                totp_enrolled=True,
+                role=role,
+                disabled=False,
+            )
+        )
         await s.commit()
     code = pyotp.TOTP(secret).now()
-    r = await c.post("/api/admin/login", json={
-        "email": email, "password": "StrongPw12345!", "totp_code": code,
-    })
+    r = await c.post(
+        "/api/admin/login",
+        json={
+            "email": email,
+            "password": "StrongPw12345!",
+            "totp_code": code,
+        },
+    )
     assert r.status_code == 200, r.text
     return c.cookies.get("csrf") or ""
 
@@ -58,16 +65,18 @@ async def _seed_and_login(
 @pytest.mark.asyncio
 async def test_list_admins() -> None:
     async with httpx.AsyncClient(base_url=BASE, verify=False) as c:
-        csrf = await _seed_and_login(c)
+        await _seed_and_login(c)
         # Seed a second admin directly
         async with SessionLocal() as s:
             auth = AuthService(max_failed_attempts=5, lockout_minutes=15)
-            s.add(Admin(
-                email="viewer@test.co",
-                password_hash=auth.hash_password("ViewerPw12345!"),
-                role="viewer",
-                disabled=False,
-            ))
+            s.add(
+                Admin(
+                    email="viewer@test.co",
+                    password_hash=auth.hash_password("ViewerPw12345!"),
+                    role="viewer",
+                    disabled=False,
+                )
+            )
             await s.commit()
         r = await c.get("/api/admin/admins")
     assert r.status_code == 200
@@ -99,9 +108,7 @@ async def test_create_admin_returns_totp_uri() -> None:
 
     # New admin's TOTP secret must be wrapped
     async with SessionLocal() as s:
-        a = (await s.execute(
-            select(Admin).where(Admin.email == "newadmin@test.co")
-        )).scalar_one()
+        a = (await s.execute(select(Admin).where(Admin.email == "newadmin@test.co"))).scalar_one()
         assert is_wrapped_totp(a.totp_secret) is True
 
 
@@ -177,9 +184,7 @@ async def test_reset_totp_returns_new_uri() -> None:
     async with httpx.AsyncClient(base_url=BASE, verify=False) as c:
         csrf = await _seed_and_login(c)
         async with SessionLocal() as s:
-            a = (await s.execute(
-                select(Admin).where(Admin.email == "root@test.co")
-            )).scalar_one()
+            a = (await s.execute(select(Admin).where(Admin.email == "root@test.co"))).scalar_one()
             original_wrapped = a.totp_secret
 
         r = await c.post(
@@ -190,9 +195,7 @@ async def test_reset_totp_returns_new_uri() -> None:
     assert r.json()["totp_uri"].startswith("otpauth://totp/")
 
     async with SessionLocal() as s:
-        a = (await s.execute(
-            select(Admin).where(Admin.email == "root@test.co")
-        )).scalar_one()
+        a = (await s.execute(select(Admin).where(Admin.email == "root@test.co"))).scalar_one()
         # Secret changed
         assert a.totp_secret != original_wrapped
         assert is_wrapped_totp(a.totp_secret)
@@ -232,16 +235,19 @@ async def test_cannot_delete_last_active_admin() -> None:
     async with httpx.AsyncClient(base_url=BASE, verify=False) as c:
         csrf = await _seed_and_login(c)
         async with SessionLocal() as s:
-            root = (await s.execute(
-                select(Admin).where(Admin.email == "root@test.co")
-            )).scalar_one()
+            root = (
+                await s.execute(select(Admin).where(Admin.email == "root@test.co"))
+            ).scalar_one()
             root_id = root.id
         r = await c.delete(
             f"/api/admin/admins/{root_id}",
             headers={"X-CSRF-Token": csrf},
         )
     assert r.status_code == 409
-    assert "minimum" in r.json()["detail"]["error"].lower() or r.json()["detail"]["error"] == "min_admins"
+    assert (
+        "minimum" in r.json()["detail"]["error"].lower()
+        or r.json()["detail"]["error"] == "min_admins"
+    )
 
 
 @pytest.mark.integration
@@ -250,9 +256,9 @@ async def test_cannot_disable_last_active_admin() -> None:
     async with httpx.AsyncClient(base_url=BASE, verify=False) as c:
         csrf = await _seed_and_login(c)
         async with SessionLocal() as s:
-            root = (await s.execute(
-                select(Admin).where(Admin.email == "root@test.co")
-            )).scalar_one()
+            root = (
+                await s.execute(select(Admin).where(Admin.email == "root@test.co"))
+            ).scalar_one()
         r = await c.patch(
             f"/api/admin/admins/{root.id}",
             json={"disabled": True},

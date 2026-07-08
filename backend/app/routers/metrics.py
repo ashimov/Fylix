@@ -23,12 +23,13 @@ The endpoint is intentionally protected at the Nginx layer via the same
 `$admin_allowed` CIDR gate as `/admin` and `/api/admin` — it MUST NOT be
 reachable from the public internet.
 """
+
 from __future__ import annotations
 
 import logging
 from typing import Annotated
 
-from hawkapi import Router, Depends, Response
+from hawkapi import Depends, Response, Router
 from prometheus_client import (
     CONTENT_TYPE_LATEST,
     CollectorRegistry,

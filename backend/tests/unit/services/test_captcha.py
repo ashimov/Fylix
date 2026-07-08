@@ -24,10 +24,12 @@ async def test_empty_token_when_required_returns_false() -> None:
 
 @pytest.mark.asyncio
 async def test_successful_verification(httpserver: HTTPServer) -> None:
-    httpserver.expect_request("/verify", method="POST").respond_with_json({
-        "success": True,
-        "challenge_ts": "2026-04-14T00:00:00Z",
-    })
+    httpserver.expect_request("/verify", method="POST").respond_with_json(
+        {
+            "success": True,
+            "challenge_ts": "2026-04-14T00:00:00Z",
+        }
+    )
     c = CaptchaVerifier(secret="s", verify_url=httpserver.url_for("/verify"))
     assert await c.verify("valid-token", remote_ip="1.2.3.4") is True
     assert len(httpserver.log) == 1
@@ -39,9 +41,12 @@ async def test_successful_verification(httpserver: HTTPServer) -> None:
 
 @pytest.mark.asyncio
 async def test_failed_verification(httpserver: HTTPServer) -> None:
-    httpserver.expect_request("/verify", method="POST").respond_with_json({
-        "success": False, "error-codes": ["invalid-input-response"],
-    })
+    httpserver.expect_request("/verify", method="POST").respond_with_json(
+        {
+            "success": False,
+            "error-codes": ["invalid-input-response"],
+        }
+    )
     c = CaptchaVerifier(secret="s", verify_url=httpserver.url_for("/verify"))
     assert await c.verify("bad-token") is False
 

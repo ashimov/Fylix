@@ -1,4 +1,3 @@
-import json
 import os
 from uuid import UUID
 
@@ -22,10 +21,12 @@ async def _clean_db() -> None:
     import shutil
 
     async with SessionLocal() as session:
-        await session.execute(text(
-            "TRUNCATE TABLE transfers, transfer_recipients, transfer_files, downloads "
-            "RESTART IDENTITY CASCADE"
-        ))
+        await session.execute(
+            text(
+                "TRUNCATE TABLE transfers, transfer_recipients, transfer_files, downloads "
+                "RESTART IDENTITY CASCADE"
+            )
+        )
         await session.commit()
 
     shutil.rmtree(app_settings.staging_dir, ignore_errors=True)
@@ -54,9 +55,11 @@ async def _create_single_file_transfer(size: int = 10) -> tuple[UUID, UUID]:
         resp = await svc.create(session, req, sender_ip="127.0.0.1", sender_ua="pt")
         await session.commit()
     async with SessionLocal() as session:
-        files = (await session.execute(
-            TransferFile.__table__.select().where(TransferFile.transfer_id == resp.transfer_id)
-        )).all()
+        files = (
+            await session.execute(
+                TransferFile.__table__.select().where(TransferFile.transfer_id == resp.transfer_id)
+            )
+        ).all()
         file_id = files[0].id
     return resp.transfer_id, file_id
 
@@ -65,6 +68,7 @@ async def _create_single_file_transfer(size: int = 10) -> tuple[UUID, UUID]:
 @pytest.mark.asyncio
 async def test_head_returns_zero_offset_and_declared_length() -> None:
     import httpx
+
     tid, fid = await _create_single_file_transfer(size=10)
     async with httpx.AsyncClient(base_url=_BASE_URL, verify=False) as c:
         r = await c.head(f"/api/transfers/{tid}/files/{fid}")

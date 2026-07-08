@@ -9,6 +9,7 @@ Every payload is auto-tagged with the current request_id (when present in
 the contextvar) so the worker side of the chain can rebind it and keep
 logs correlatable across HTTP → queue → task boundaries.
 """
+
 from __future__ import annotations
 
 import json
@@ -42,12 +43,11 @@ async def push_job(redis: Redis, queue: str, payload: dict[str, Any]) -> None:
     await redis.lpush(queue, json.dumps(payload).encode("utf-8"))  # type: ignore[misc]
 
 
-async def pop_job(
-    redis: Redis, queue: str, *, timeout: int = 5
-) -> dict[str, Any] | None:
+async def pop_job(redis: Redis, queue: str, *, timeout: int = 5) -> dict[str, Any] | None:
     """Blocking pop with timeout. Returns None on timeout so caller can loop."""
     result = await redis.brpop([queue], timeout=timeout)  # type: ignore[misc]
     if result is None:
         return None
     _queue_name, raw = result
-    return json.loads(raw)
+    job: dict[str, Any] = json.loads(raw)
+    return job

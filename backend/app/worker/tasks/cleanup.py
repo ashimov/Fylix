@@ -1,8 +1,9 @@
 """Cleanup task: sweep expired transfers, crypto-shred them, delete MinIO objects."""
+
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,13 +25,19 @@ async def run_cleanup_once(
 
     Returns the number of transfers processed.
     """
-    now = datetime.now(timezone.utc)
-    rows = (await session.execute(
-        select(Transfer).where(
-            Transfer.status == "ready",
-            Transfer.expires_at < now,
+    now = datetime.now(UTC)
+    rows = (
+        (
+            await session.execute(
+                select(Transfer).where(
+                    Transfer.status == "ready",
+                    Transfer.expires_at < now,
+                )
+            )
         )
-    )).scalars().all()
+        .scalars()
+        .all()
+    )
 
     processed = 0
     for t in rows:
@@ -43,13 +50,15 @@ async def run_cleanup_once(
         t.status = "expired"
         t.deleted_at = now
 
-        session.add(AuditLog(
-            ts=now,
-            event_type="expired",
-            severity="info",
-            transfer_id=t.id,
-            details={"reason": "ttl"},
-        ))
+        session.add(
+            AuditLog(
+                ts=now,
+                event_type="expired",
+                severity="info",
+                transfer_id=t.id,
+                details={"reason": "ttl"},
+            )
+        )
 
         staging.secure_delete(t.id)
         processed += 1

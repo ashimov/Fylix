@@ -1,8 +1,6 @@
 from pathlib import Path
 from unittest.mock import MagicMock
 
-import pytest
-
 from app.services.geoip import GeoIPReader
 
 
@@ -28,6 +26,7 @@ def test_country_lookup_returns_iso_code(monkeypatch, tmp_path: Path) -> None:
         return fake_reader
 
     import geoip2.database
+
     monkeypatch.setattr(geoip2.database, "Reader", fake_open)
 
     r = GeoIPReader(db_path=fake_db)
@@ -70,6 +69,7 @@ def test_is_country_allowed_rejects_unknown_country(monkeypatch, tmp_path: Path)
     fake_reader.country.return_value = MagicMock(country=MagicMock(iso_code="RU"))
 
     import geoip2.database
+
     monkeypatch.setattr(geoip2.database, "Reader", lambda p: fake_reader)
 
     r = GeoIPReader(db_path=fake_db)

@@ -1,4 +1,5 @@
 """Role guards: ensure viewer can't POST admin-only endpoints."""
+
 import os
 
 import httpx
@@ -24,23 +25,30 @@ async def _seed(email: str, role: str, password: str = "StrongPw123!") -> tuple[
     auth = AuthService(max_failed_attempts=5, lockout_minutes=15)
     secret = auth.generate_totp_secret()
     async with SessionLocal() as s:
-        s.add(Admin(
-            email=email,
-            password_hash=auth.hash_password(password),
-            totp_secret=secret.encode("utf-8"),
-            totp_enrolled=True,
-            role=role,
-            disabled=False,
-        ))
+        s.add(
+            Admin(
+                email=email,
+                password_hash=auth.hash_password(password),
+                totp_secret=secret.encode("utf-8"),
+                totp_enrolled=True,
+                role=role,
+                disabled=False,
+            )
+        )
         await s.commit()
     return email, secret
 
 
 async def _login(c: httpx.AsyncClient, email: str, secret: str) -> str:
     code = pyotp.TOTP(secret).now()
-    r = await c.post("/api/admin/login", json={
-        "email": email, "password": "StrongPw123!", "totp_code": code,
-    })
+    r = await c.post(
+        "/api/admin/login",
+        json={
+            "email": email,
+            "password": "StrongPw123!",
+            "totp_code": code,
+        },
+    )
     assert r.status_code == 200, r.text
     return c.cookies.get("csrf") or ""
 

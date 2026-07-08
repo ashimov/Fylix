@@ -10,13 +10,17 @@ from app.services.settings_service import SettingsService
 @pytest.fixture
 def policy_stub(monkeypatch) -> UploadPolicy:
     ss = SettingsService()
-    ss.get_int = AsyncMock(side_effect=lambda s, k, d: {
-        "max_transfer_size_gb": 2,
-        "max_recipients": 20,
-    }.get(k, d))
-    ss.get_list = AsyncMock(side_effect=lambda s, k, d: {
-        "extension_blacklist": [".exe", ".bat", ".scr"],
-    }.get(k, d))
+    ss.get_int = AsyncMock(
+        side_effect=lambda s, k, d: {
+            "max_transfer_size_gb": 2,
+            "max_recipients": 20,
+        }.get(k, d)
+    )
+    ss.get_list = AsyncMock(
+        side_effect=lambda s, k, d: {
+            "extension_blacklist": [".exe", ".bat", ".scr"],
+        }.get(k, d)
+    )
     return UploadPolicy(ss)
 
 

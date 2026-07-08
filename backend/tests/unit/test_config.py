@@ -1,4 +1,5 @@
 """Settings validation — production must be fail-closed on security controls."""
+
 from __future__ import annotations
 
 import pytest

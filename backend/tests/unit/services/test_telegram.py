@@ -13,9 +13,9 @@ def test_disabled_is_noop() -> None:
 
 @pytest.mark.asyncio
 async def test_enabled_posts_to_sendMessage(httpserver: HTTPServer) -> None:
-    httpserver.expect_request(
-        "/bottok-123/sendMessage", method="POST"
-    ).respond_with_json({"ok": True})
+    httpserver.expect_request("/bottok-123/sendMessage", method="POST").respond_with_json(
+        {"ok": True}
+    )
 
     c = TelegramClient(
         bot_token="tok-123",

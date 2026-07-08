@@ -14,6 +14,7 @@ Security note: TOTP secret is wrapped with master_key via AES-KW (RFC 3394)
 before insert. Run `scripts/wrap_totp_secrets.py` to migrate any legacy
 plaintext secrets created before this hardening was applied.
 """
+
 from __future__ import annotations
 
 import argparse

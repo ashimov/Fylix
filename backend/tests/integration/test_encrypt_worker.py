@@ -1,4 +1,5 @@
 """End-to-end test: POST create → tus PATCH → worker encrypts → DB shows ready, MinIO has ciphertext."""
+
 from __future__ import annotations
 
 import asyncio
@@ -113,10 +114,14 @@ async def test_full_upload_encrypt_pipeline() -> None:
     # DB: TransferFile rows should be updated with iv, sha256_cipher, mime_type
     async with SessionLocal() as session:
         files = (
-            await session.execute(
-                select(TransferFile).where(TransferFile.transfer_id == transfer_id)
+            (
+                await session.execute(
+                    select(TransferFile).where(TransferFile.transfer_id == transfer_id)
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
     assert len(files) == 1
     tf = files[0]
     assert tf.iv != b"\x00" * 12  # overwritten with random IV

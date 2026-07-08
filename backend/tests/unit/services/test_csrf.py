@@ -1,7 +1,7 @@
 import pytest
 from hawkapi import HawkAPI
-from hawkapi.testing import TestClient
 from hawkapi.responses import JSONResponse
+from hawkapi.testing import TestClient
 
 from app.middleware.csrf import CsrfMiddleware
 
@@ -33,8 +33,9 @@ def _build_app() -> HawkAPI:
 def _insecure_cookies(monkeypatch: pytest.MonkeyPatch) -> None:
     """Unit tests run over plain HTTP via TestClient; disable Secure flag so
     cookies are echoed back on subsequent requests."""
-    import app.middleware.csrf as csrf_mod
     import app.config as config_mod
+    import app.middleware.csrf as csrf_mod
+
     monkeypatch.setattr(config_mod.settings, "dev_insecure_cookies", True)
     monkeypatch.setattr(csrf_mod.settings, "dev_insecure_cookies", True)
 

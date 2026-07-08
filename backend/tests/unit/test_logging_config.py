@@ -1,4 +1,5 @@
 """Structured JSON log formatter — contracts for every log line Fylix emits."""
+
 from __future__ import annotations
 
 import json
@@ -13,13 +14,22 @@ def _format(record: logging.LogRecord) -> dict[str, object]:
 
 
 def _record(
-    *, level: int = logging.INFO, msg: str = "hello", name: str = "fylix.test",
-    args: tuple | None = None, exc_info: object | None = None,
+    *,
+    level: int = logging.INFO,
+    msg: str = "hello",
+    name: str = "fylix.test",
+    args: tuple | None = None,
+    exc_info: object | None = None,
     extra: dict[str, object] | None = None,
 ) -> logging.LogRecord:
     rec = logging.LogRecord(
-        name=name, level=level, pathname="x.py", lineno=1,
-        msg=msg, args=args or (), exc_info=exc_info,
+        name=name,
+        level=level,
+        pathname="x.py",
+        lineno=1,
+        msg=msg,
+        args=args or (),
+        exc_info=exc_info,
     )
     if extra:
         for k, v in extra.items():
@@ -78,6 +88,7 @@ def test_exception_info_serialised() -> None:
         raise ValueError("boom")
     except ValueError:
         import sys
+
         rec = _record(level=logging.ERROR, msg="failure", exc_info=sys.exc_info())
     out = _format(rec)
     assert "exc" in out

@@ -3,45 +3,65 @@
 Mounted under /api/admin (without a router-level prefix here — main.py
 sets prefix="/api/admin" when including this router).
 """
+
 from __future__ import annotations
 
 import ipaddress
 import logging
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
 from hawkapi import Depends, Request, Response, Router, status
 from hawkapi.responses import JSONResponse
-
-from app.http import HTTPException, delete_cookie, set_cookie
 from redis.asyncio import Redis
-from sqlalchemy import and_, func, or_, select, tuple_
+from sqlalchemy import func, or_, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.db import SessionLocal
+from app.http import HTTPException, delete_cookie, set_cookie
 from app.models import (
-    Admin, AdminAction, AuditLog,
-    BlocklistEmail, BlocklistEmailDomain, BlocklistIP,
-    Download, Setting, Transfer, TransferFile, TransferRecipient,
+    Admin,
+    AdminAction,
+    AuditLog,
+    BlocklistEmail,
+    BlocklistEmailDomain,
+    BlocklistIP,
+    Download,
+    Setting,
+    Transfer,
+    TransferFile,
+    TransferRecipient,
 )
 from app.schemas.admin import (
-    AdminActionListResponse, AdminActionRow,
-    AdminCreateRequest, AdminCreateResponse, AdminRow, AdminUpdateRequest,
-    AdminPublic, AuditListResponse, AuditRow,
-    BlocklistAddRequest, BlocklistEntry,
-    DownloadDetail, FileDetail, LoginRequest, LoginResponse,
+    AdminActionListResponse,
+    AdminActionRow,
+    AdminCreateRequest,
+    AdminCreateResponse,
+    AdminPublic,
+    AdminRow,
+    AdminUpdateRequest,
+    AuditListResponse,
+    AuditRow,
+    BlocklistAddRequest,
+    BlocklistEntry,
+    DownloadDetail,
+    FileDetail,
+    LoginRequest,
+    LoginResponse,
     PatchSettingsRequest,
     RecipientDetail,
     ResetTotpResponse,
-    TelegramConfig, TelegramConfigUpdate,
-    TransferDetailResponse, TransferListResponse, TransferRow,
+    TelegramConfig,
+    TelegramConfigUpdate,
+    TransferDetailResponse,
+    TransferListResponse,
+    TransferRow,
 )
-from app.services.auth import wrap_totp_secret
 from app.services import admin_actions
-from app.services.auth import AuthService
+from app.services.auth import AuthService, wrap_totp_secret
 from app.services.session import SessionStore
 from app.services.settings_service import SettingsService
 from app.services.storage import StorageService
@@ -72,9 +92,8 @@ def _decode_cursor(raw: str) -> tuple[datetime, UUID] | None:
 
 def _cookie_secure() -> bool:
     """Return True unless explicitly disabled via DEV_INSECURE_COOKIES for local dev."""
-    if settings.dev_insecure_cookies:
-        return False
-    return True
+    return not settings.dev_insecure_cookies
+
 
 # ---------------------------------------------------------------------------
 # Module-level service singletons
@@ -136,6 +155,7 @@ from app.utils.http import client_ip as _client_ip  # noqa: E402, I001
 # Auth: login / logout / me
 # ---------------------------------------------------------------------------
 
+
 @router.post("/login", response_model=LoginResponse)
 async def login(
     payload: LoginRequest,
@@ -188,7 +208,7 @@ async def login(
 
     # Success.
     _auth.reset_failures(admin)
-    admin.last_login_at = datetime.now(timezone.utc)
+    admin.last_login_at = datetime.now(UTC)
     await session.commit()
 
     sid = await _get_session_store().create(admin_id=admin.id)
@@ -290,6 +310,7 @@ async def me(ctx: _AdminCtx = Depends(require_session)) -> AdminPublic:
 # Transfers: list / detail / delete / revoke
 # ---------------------------------------------------------------------------
 
+
 @router.get("/transfers", response_model=TransferListResponse)
 async def admin_list_transfers(
     request: Request,
@@ -324,9 +345,7 @@ async def admin_list_transfers(
             or_(
                 Transfer.sender_email.ilike(like),
                 Transfer.id.in_(
-                    select(TransferFile.transfer_id).where(
-                        TransferFile.filename.ilike(like)
-                    )
+                    select(TransferFile.transfer_id).where(TransferFile.filename.ilike(like))
                 ),
             )
         )
@@ -335,19 +354,14 @@ async def admin_list_transfers(
         if decoded is not None:
             cursor_ts, cursor_id = decoded
             stmt = stmt.where(
-                tuple_(Transfer.created_at, Transfer.id)
-                < tuple_(cursor_ts, cursor_id)  # type: ignore[arg-type]
+                tuple_(Transfer.created_at, Transfer.id) < tuple_(cursor_ts, cursor_id)  # type: ignore[arg-type]
             )
     stmt = stmt.limit(limit + 1)
 
     rows = (await session.execute(stmt)).scalars().all()
     has_more = len(rows) > limit
     rows = rows[:limit]
-    next_cursor = (
-        _encode_cursor(rows[-1].created_at, rows[-1].id)
-        if has_more and rows
-        else None
-    )
+    next_cursor = _encode_cursor(rows[-1].created_at, rows[-1].id) if has_more and rows else None
 
     items = [
         TransferRow(
@@ -375,16 +389,31 @@ async def admin_get_transfer(
     t = await session.get(Transfer, transfer_id)
     if t is None:
         raise HTTPException(status_code=404, detail={"error": "not_found"})
-    files = (await session.execute(
-        select(TransferFile).where(TransferFile.transfer_id == transfer_id)
-    )).scalars().all()
-    recipients = (await session.execute(
-        select(TransferRecipient).where(TransferRecipient.transfer_id == transfer_id)
-    )).scalars().all()
-    downloads = (await session.execute(
-        select(Download).where(Download.transfer_id == transfer_id)
-        .order_by(Download.started_at.desc())
-    )).scalars().all()
+    files = (
+        (await session.execute(select(TransferFile).where(TransferFile.transfer_id == transfer_id)))
+        .scalars()
+        .all()
+    )
+    recipients = (
+        (
+            await session.execute(
+                select(TransferRecipient).where(TransferRecipient.transfer_id == transfer_id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    downloads = (
+        (
+            await session.execute(
+                select(Download)
+                .where(Download.transfer_id == transfer_id)
+                .order_by(Download.started_at.desc())
+            )
+        )
+        .scalars()
+        .all()
+    )
     return TransferDetailResponse(
         id=t.id,
         sender_email=t.sender_email,
@@ -405,14 +434,20 @@ async def admin_get_transfer(
             for f in files
         ],
         recipients=[
-            RecipientDetail(email=r.email, email_sent_at=r.email_sent_at, email_status=r.email_status)
+            RecipientDetail(
+                email=r.email, email_sent_at=r.email_sent_at, email_status=r.email_status
+            )
             for r in recipients
         ],
         downloads=[
             DownloadDetail(
-                ip=str(d.ip), country=d.country, ua=d.ua,
-                started_at=d.started_at, completed_at=d.completed_at,
-                bytes_sent=d.bytes_sent, aborted=d.aborted,
+                ip=str(d.ip),
+                country=d.country,
+                ua=d.ua,
+                started_at=d.started_at,
+                completed_at=d.completed_at,
+                bytes_sent=d.bytes_sent,
+                aborted=d.aborted,
             )
             for d in downloads
         ],
@@ -445,7 +480,7 @@ async def admin_delete_transfer(
         )
     t.status = "deleted"
     t.wrapped_key = None
-    t.deleted_at = datetime.now(timezone.utc)
+    t.deleted_at = datetime.now(UTC)
     await admin_actions.record(
         session,
         admin_id=ctx.admin.id,
@@ -471,7 +506,7 @@ async def admin_revoke_transfer(
     if t.status in ("revoked", "deleted", "expired", "infected"):
         return Response(status_code=204)
     t.status = "revoked"
-    t.revoked_at = datetime.now(timezone.utc)
+    t.revoked_at = datetime.now(UTC)
     await admin_actions.record(
         session,
         admin_id=ctx.admin.id,
@@ -488,9 +523,7 @@ async def admin_revoke_transfer(
 # Blocklist CRUD
 # ---------------------------------------------------------------------------
 
-_DOMAIN_RE = re.compile(
-    r"^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$"
-)
+_DOMAIN_RE = re.compile(r"^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$")
 
 _BLOCKLIST_KINDS = {"ips", "domains", "emails"}
 
@@ -500,7 +533,7 @@ def _validate_blocklist_value(kind: str, value: str) -> None:
         try:
             ipaddress.ip_network(value, strict=False)
         except ValueError:
-            raise HTTPException(status_code=400, detail={"error": "invalid_ip_or_cidr"})
+            raise HTTPException(status_code=400, detail={"error": "invalid_ip_or_cidr"}) from None
     elif kind == "domains":
         if not _DOMAIN_RE.match(value.lower()):
             raise HTTPException(status_code=400, detail={"error": "invalid_domain"})
@@ -522,13 +555,28 @@ async def admin_blocklist_list(
         raise HTTPException(status_code=404, detail={"error": "unknown_kind"})
     if kind == "ips":
         rows = (await session.execute(select(BlocklistIP))).scalars().all()
-        return [BlocklistEntry(value=str(r.cidr), reason=r.reason, added_at=r.added_at, expires_at=r.expires_at) for r in rows]
+        return [
+            BlocklistEntry(
+                value=str(r.cidr), reason=r.reason, added_at=r.added_at, expires_at=r.expires_at
+            )
+            for r in rows
+        ]
     elif kind == "domains":
         rows = (await session.execute(select(BlocklistEmailDomain))).scalars().all()
-        return [BlocklistEntry(value=r.domain, reason=r.reason, added_at=r.added_at, expires_at=r.expires_at) for r in rows]
+        return [
+            BlocklistEntry(
+                value=r.domain, reason=r.reason, added_at=r.added_at, expires_at=r.expires_at
+            )
+            for r in rows
+        ]
     else:  # emails
         rows = (await session.execute(select(BlocklistEmail))).scalars().all()
-        return [BlocklistEntry(value=r.email, reason=r.reason, added_at=r.added_at, expires_at=r.expires_at) for r in rows]
+        return [
+            BlocklistEntry(
+                value=r.email, reason=r.reason, added_at=r.added_at, expires_at=r.expires_at
+            )
+            for r in rows
+        ]
 
 
 @router.post("/blocklist/{kind}", status_code=201)
@@ -542,7 +590,7 @@ async def admin_blocklist_add(
     if kind not in _BLOCKLIST_KINDS:
         raise HTTPException(status_code=404, detail={"error": "unknown_kind"})
     _validate_blocklist_value(kind, payload.value)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     if kind == "ips":
         # Normalise: store canonical CIDR
         cidr = str(ipaddress.ip_network(payload.value, strict=False))
@@ -550,8 +598,11 @@ async def admin_blocklist_add(
         if existing:
             raise HTTPException(status_code=409, detail={"error": "already_exists"})
         row = BlocklistIP(
-            cidr=cidr, reason=payload.reason,
-            added_by=ctx.admin.id, added_at=now, expires_at=payload.expires_at
+            cidr=cidr,
+            reason=payload.reason,
+            added_by=ctx.admin.id,
+            added_at=now,
+            expires_at=payload.expires_at,
         )
         session.add(row)
         result_value = cidr
@@ -563,8 +614,11 @@ async def admin_blocklist_add(
         if existing:
             raise HTTPException(status_code=409, detail={"error": "already_exists"})
         row = BlocklistEmailDomain(
-            domain=domain, reason=payload.reason,
-            added_by=ctx.admin.id, added_at=now, expires_at=payload.expires_at
+            domain=domain,
+            reason=payload.reason,
+            added_by=ctx.admin.id,
+            added_at=now,
+            expires_at=payload.expires_at,
         )
         session.add(row)
         result_value = domain
@@ -576,8 +630,11 @@ async def admin_blocklist_add(
         if existing:
             raise HTTPException(status_code=409, detail={"error": "already_exists"})
         row = BlocklistEmail(
-            email=email, reason=payload.reason,
-            added_by=ctx.admin.id, added_at=now, expires_at=payload.expires_at
+            email=email,
+            reason=payload.reason,
+            added_by=ctx.admin.id,
+            added_at=now,
+            expires_at=payload.expires_at,
         )
         session.add(row)
         result_value = email
@@ -593,7 +650,12 @@ async def admin_blocklist_add(
         details={"reason": payload.reason},
     )
     await session.commit()
-    return BlocklistEntry(value=result_value, reason=payload.reason, added_at=result_added_at, expires_at=result_expires_at)
+    return BlocklistEntry(
+        value=result_value,
+        reason=payload.reason,
+        added_at=result_added_at,
+        expires_at=result_expires_at,
+    )
 
 
 @router.delete("/blocklist/{kind}/{value}", status_code=204)
@@ -677,7 +739,7 @@ async def admin_patch_settings(
     # before this handler runs. No separate set-difference check needed.
     changes = payload.to_changes()
     result: dict[str, Any] = {}
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     for key, new_value in changes.items():
         row = await session.get(Setting, key)
         old_value = row.value if row else None
@@ -723,7 +785,7 @@ async def admin_add_extension(
     try:
         payload = await request.json()
     except Exception:
-        raise HTTPException(status_code=400, detail={"error": "invalid JSON body"})
+        raise HTTPException(status_code=400, detail={"error": "invalid JSON body"}) from None
     if not isinstance(payload, dict):
         raise HTTPException(status_code=400, detail={"error": "body must be an object"})
     ext = str(payload.get("extension", "")).strip().lower()
@@ -734,7 +796,7 @@ async def admin_add_extension(
     if len(ext) > 16:
         raise HTTPException(status_code=400, detail={"error": "extension too long (max 16 chars)"})
     row = await session.get(Setting, "extension_blacklist")
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     if row is None:
         current: list[str] = []
         row = Setting(key="extension_blacklist", value=[], updated_at=now, updated_by=ctx.admin.id)
@@ -775,7 +837,7 @@ async def admin_remove_extension(
     if ext not in current:
         raise HTTPException(status_code=404, detail={"error": "not_found"})
     row.value = [e for e in current if e != ext]
-    row.updated_at = datetime.now(timezone.utc)
+    row.updated_at = datetime.now(UTC)
     row.updated_by = ctx.admin.id
     await admin_actions.record(
         session,
@@ -793,6 +855,7 @@ async def admin_remove_extension(
 # ---------------------------------------------------------------------------
 # Audit log list + CSV export
 # ---------------------------------------------------------------------------
+
 
 @router.get("/audit", response_model=AuditListResponse)
 async def admin_list_audit(
@@ -817,6 +880,7 @@ async def admin_list_audit(
     if ip:
         from sqlalchemy import cast
         from sqlalchemy.dialects.postgresql import INET
+
         stmt = stmt.where(AuditLog.ip == cast(ip, INET))
     if transfer_id:
         stmt = stmt.where(AuditLog.transfer_id == transfer_id)
@@ -829,23 +893,26 @@ async def admin_list_audit(
         if decoded is not None:
             cursor_ts, cursor_id = decoded
             stmt = stmt.where(
-                tuple_(AuditLog.ts, AuditLog.id)
-                < tuple_(cursor_ts, cursor_id)  # type: ignore[arg-type]
+                tuple_(AuditLog.ts, AuditLog.id) < tuple_(cursor_ts, cursor_id)  # type: ignore[arg-type]
             )
     stmt = stmt.limit(limit + 1)
 
     rows = (await session.execute(stmt)).scalars().all()
     has_more = len(rows) > limit
     rows = rows[:limit]
-    next_cursor = (
-        _encode_cursor(rows[-1].ts, rows[-1].id) if has_more and rows else None
-    )
+    next_cursor = _encode_cursor(rows[-1].ts, rows[-1].id) if has_more and rows else None
 
     items = [
         AuditRow(
-            id=r.id, ts=r.ts, event_type=r.event_type, severity=r.severity,
-            ip=str(r.ip) if r.ip else None, country=r.country,
-            transfer_id=r.transfer_id, admin_id=r.admin_id, details=r.details,
+            id=r.id,
+            ts=r.ts,
+            event_type=r.event_type,
+            severity=r.severity,
+            ip=str(r.ip) if r.ip else None,
+            country=r.country,
+            transfer_id=r.transfer_id,
+            admin_id=r.admin_id,
+            details=r.details,
         )
         for r in rows
     ]
@@ -959,7 +1026,7 @@ async def admin_audit_csv(
                 f"{r.id},{r.ts.isoformat()},{r.event_type},{r.severity},"
                 f"{r.ip or ''},{r.country or ''},{r.transfer_id or ''},"
                 f"{r.admin_id or ''}\n"
-            ).encode("utf-8")
+            ).encode()
 
     return SR(
         _generate(),
@@ -971,6 +1038,7 @@ async def admin_audit_csv(
 # ---------------------------------------------------------------------------
 # Admin-actions list
 # ---------------------------------------------------------------------------
+
 
 @router.get("/admin-actions", response_model=AdminActionListResponse)
 async def admin_list_actions(
@@ -1006,9 +1074,14 @@ async def admin_list_actions(
 
     items = [
         AdminActionRow(
-            id=r.id, ts=r.ts, admin_id=r.admin_id, action=r.action,
-            target_type=r.target_type, target_id=r.target_id,
-            ip=str(r.ip) if r.ip else None, details=r.details,
+            id=r.id,
+            ts=r.ts,
+            admin_id=r.admin_id,
+            action=r.action,
+            target_type=r.target_type,
+            target_id=r.target_id,
+            ip=str(r.ip) if r.ip else None,
+            details=r.details,
         )
         for r in rows
     ]
@@ -1019,6 +1092,7 @@ async def admin_list_actions(
 # Analytics
 # ---------------------------------------------------------------------------
 
+
 @router.get("/analytics")
 async def admin_analytics(
     request: Request,
@@ -1027,6 +1101,7 @@ async def admin_analytics(
     days: int = 30,
 ) -> Any:
     from app.services.analytics import AnalyticsService
+
     svc = AnalyticsService(_get_redis())
     return await svc.get(session, days=days)
 
@@ -1035,10 +1110,9 @@ async def admin_analytics(
 # Admins CRUD
 # ---------------------------------------------------------------------------
 
+
 def _active_admin_count_stmt():
-    return select(func.count(Admin.id)).where(
-        Admin.disabled.is_(False), Admin.role == "admin"
-    )
+    return select(func.count(Admin.id)).where(Admin.disabled.is_(False), Admin.role == "admin")
 
 
 @router.get("/admins", response_model=list[AdminRow])
@@ -1046,9 +1120,7 @@ async def admin_list_admins(
     session: AsyncSession = Depends(_session),
     ctx: _AdminCtx = Depends(require_session),
 ) -> list[AdminRow]:
-    rows = (await session.execute(
-        select(Admin).order_by(Admin.created_at.asc())
-    )).scalars().all()
+    rows = (await session.execute(select(Admin).order_by(Admin.created_at.asc()))).scalars().all()
     return [
         AdminRow(
             id=a.id,
@@ -1073,9 +1145,9 @@ async def admin_create_admin(
     ctx: _AdminCtx = Depends(require_admin_role),
 ) -> AdminCreateResponse:
     # Check duplicate
-    existing = (await session.execute(
-        select(Admin).where(Admin.email == payload.email)
-    )).scalar_one_or_none()
+    existing = (
+        await session.execute(select(Admin).where(Admin.email == payload.email))
+    ).scalar_one_or_none()
     if existing is not None:
         raise HTTPException(409, detail={"error": "duplicate_email"})
 
@@ -1109,9 +1181,14 @@ async def admin_create_admin(
     uri = _auth.build_totp_uri(secret, email=a.email, issuer="Fylix")
     return AdminCreateResponse(
         admin=AdminRow(
-            id=a.id, email=a.email, role=a.role, disabled=a.disabled,
-            totp_enrolled=a.totp_enrolled, last_login_at=a.last_login_at,
-            created_at=a.created_at, failed_attempts=a.failed_attempts,
+            id=a.id,
+            email=a.email,
+            role=a.role,
+            disabled=a.disabled,
+            totp_enrolled=a.totp_enrolled,
+            last_login_at=a.last_login_at,
+            created_at=a.created_at,
+            failed_attempts=a.failed_attempts,
             locked_until=a.locked_until,
         ),
         totp_uri=uri,
@@ -1132,9 +1209,8 @@ async def admin_update_admin(
 
     changes: dict = {}
     # If we're about to disable or demote the last active admin, block.
-    would_reduce_active = (
-        payload.disabled is True
-        or (payload.role == "viewer" and a.role == "admin")
+    would_reduce_active = payload.disabled is True or (
+        payload.role == "viewer" and a.role == "admin"
     )
     if would_reduce_active and not a.disabled and a.role == "admin":
         count = (await session.execute(_active_admin_count_stmt())).scalar_one()
@@ -1161,9 +1237,14 @@ async def admin_update_admin(
     await session.commit()
 
     return AdminRow(
-        id=a.id, email=a.email, role=a.role, disabled=a.disabled,
-        totp_enrolled=a.totp_enrolled, last_login_at=a.last_login_at,
-        created_at=a.created_at, failed_attempts=a.failed_attempts,
+        id=a.id,
+        email=a.email,
+        role=a.role,
+        disabled=a.disabled,
+        totp_enrolled=a.totp_enrolled,
+        last_login_at=a.last_login_at,
+        created_at=a.created_at,
+        failed_attempts=a.failed_attempts,
         locked_until=a.locked_until,
     )
 
@@ -1195,9 +1276,7 @@ async def admin_reset_totp(
     )
     await session.commit()
 
-    return ResetTotpResponse(
-        totp_uri=_auth.build_totp_uri(secret, email=a.email, issuer="Fylix")
-    )
+    return ResetTotpResponse(totp_uri=_auth.build_totp_uri(secret, email=a.email, issuer="Fylix"))
 
 
 @router.delete("/admins/{admin_id:uuid}", status_code=204)
@@ -1276,7 +1355,9 @@ async def admin_get_telegram(
         chat_id=str(values.get("telegram_chat_id") or ""),
         alert_on_infected=_as_bool(values.get("telegram_alert_on_infected"), True),
         alert_on_rate_limit_spike=_as_bool(values.get("telegram_alert_on_rate_limit_spike"), True),
-        alert_on_admin_login_fail_spike=_as_bool(values.get("telegram_alert_on_admin_login_fail_spike"), True),
+        alert_on_admin_login_fail_spike=_as_bool(
+            values.get("telegram_alert_on_admin_login_fail_spike"), True
+        ),
         alert_on_storage_high=_as_bool(values.get("telegram_alert_on_storage_high"), True),
         alert_on_defender_event=_as_bool(values.get("telegram_alert_on_defender_event"), True),
         rate_limit_spike_threshold=_as_int(values.get("telegram_rate_limit_spike_threshold"), 20),
@@ -1430,8 +1511,8 @@ async def admin_crypto_rewrap(
     # Admin TOTP secrets: small set, no chunking needed.
     admins_rewrapped = 0
     admin_rows = (
-        await session.execute(select(Admin).where(Admin.totp_secret.is_not(None)))
-    ).scalars().all()
+        (await session.execute(select(Admin).where(Admin.totp_secret.is_not(None)))).scalars().all()
+    )
     for a in admin_rows:
         secret = a.totp_secret
         if secret is None or not is_wrapped_totp(secret):

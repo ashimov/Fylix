@@ -4,6 +4,7 @@ existing admins still log in.
 This test is SLOW (~10 seconds) because it generates real transfers and
 then runs the in-process rotation subprocess.
 """
+
 import asyncio
 import io
 import os
@@ -26,17 +27,18 @@ from app.models import Admin, Transfer, TransferFile
 from app.services.auth import AuthService, unwrap_totp_secret, wrap_totp_secret
 from app.services.storage import StorageService
 
-
 BASE = os.environ.get("PUBLIC_URL", "http://localhost:8000")
 
 
 @pytest.fixture(autouse=True)
 async def _reset() -> None:
     async with SessionLocal() as s:
-        await s.execute(text(
-            "TRUNCATE TABLE transfers, transfer_recipients, transfer_files, "
-            "downloads, audit_log, admin_actions RESTART IDENTITY CASCADE"
-        ))
+        await s.execute(
+            text(
+                "TRUNCATE TABLE transfers, transfer_recipients, transfer_files, "
+                "downloads, audit_log, admin_actions RESTART IDENTITY CASCADE"
+            )
+        )
         await s.execute(text("DELETE FROM admins"))
         await s.commit()
 
@@ -51,12 +53,15 @@ async def test_master_key_rotation_preserves_access() -> None:
     # Seed a ready transfer (upload + wait for worker)
     payload = b"rotation-test-payload" * 100  # ~2 KB
     async with httpx.AsyncClient(base_url=BASE, verify=False) as c:
-        resp = await c.post("/api/transfers", json={
-            "sender_email": "rot@test.co",
-            "recipient_emails": ["r@test.co"],
-            "ttl_days": 1,
-            "files": [{"filename": "rot.bin", "size": len(payload)}],
-        })
+        resp = await c.post(
+            "/api/transfers",
+            json={
+                "sender_email": "rot@test.co",
+                "recipient_emails": ["r@test.co"],
+                "ttl_days": 1,
+                "files": [{"filename": "rot.bin", "size": len(payload)}],
+            },
+        )
         assert resp.status_code == 201
         body = resp.json()
         transfer_id = UUID(body["transfer_id"])
@@ -84,14 +89,16 @@ async def test_master_key_rotation_preserves_access() -> None:
     secret = auth.generate_totp_secret()
     master_old = load_master_key(app_settings.master_key_path, enforce_perms=False)
     async with SessionLocal() as s:
-        s.add(Admin(
-            email="pre-rotate@test.co",
-            password_hash=auth.hash_password("StrongPw12345!"),
-            totp_secret=wrap_totp_secret(master_old, secret),
-            totp_enrolled=True,
-            role="admin",
-            disabled=False,
-        ))
+        s.add(
+            Admin(
+                email="pre-rotate@test.co",
+                password_hash=auth.hash_password("StrongPw12345!"),
+                totp_secret=wrap_totp_secret(master_old, secret),
+                totp_enrolled=True,
+                role="admin",
+                disabled=False,
+            )
+        )
         await s.commit()
 
     # --- Part B: rotate ---
@@ -108,9 +115,12 @@ async def test_master_key_rotation_preserves_access() -> None:
 
         # Run the rotation script as a subprocess (same approach as other integration tests)
         proc = subprocess.run(
-            ["/opt/venv/bin/python", "scripts/rotate_master_key.py",
-             "--new-key", new_key_path_str],
-            capture_output=True, text=True, timeout=60, cwd="/app",
+            ["/opt/venv/bin/python", "scripts/rotate_master_key.py", "--new-key", new_key_path_str],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            cwd="/app",
+            check=False,
         )
         assert proc.returncode == 0, f"stderr: {proc.stderr}\nstdout: {proc.stdout}"
         assert "ROTATION COMPLETE" in proc.stdout
@@ -135,9 +145,9 @@ async def test_master_key_rotation_preserves_access() -> None:
         # Unwrap with the NEW key — this proves rewrap succeeded
         file_key = unwrap_key(new_master, t.wrapped_key)
 
-        f = (await s.execute(
-            select(TransferFile).where(TransferFile.transfer_id == transfer_id)
-        )).scalar_one()
+        f = (
+            await s.execute(select(TransferFile).where(TransferFile.transfer_id == transfer_id))
+        ).scalar_one()
 
     # Decrypt ciphertext with new-key-derived file_key — should roundtrip
     ct = b"".join(storage.get_stream(f.object_key))
@@ -148,9 +158,7 @@ async def test_master_key_rotation_preserves_access() -> None:
     # --- Part D: verify admin TOTP still works with NEW key ---
 
     async with SessionLocal() as s:
-        a = (await s.execute(
-            select(Admin).where(Admin.email == "pre-rotate@test.co")
-        )).scalar_one()
+        a = (await s.execute(select(Admin).where(Admin.email == "pre-rotate@test.co"))).scalar_one()
         # TOTP secret should now unwrap with NEW key and yield the ORIGINAL secret
         recovered_secret = unwrap_totp_secret(new_master, a.totp_secret)
         assert recovered_secret == secret

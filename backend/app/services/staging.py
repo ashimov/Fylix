@@ -7,14 +7,16 @@ bytes with random data before unlinking to make residual plaintext
 recovery harder on spinning disks. On SSDs this is best-effort (wear
 levelling may preserve old blocks).
 """
+
 from __future__ import annotations
 
 import os
 import re
 import secrets
-from contextlib import contextmanager
+from collections.abc import Iterator
+from contextlib import contextmanager, suppress
 from pathlib import Path
-from typing import IO, Iterator
+from typing import IO
 from uuid import UUID
 
 
@@ -53,9 +55,7 @@ class StagingService:
         return self.transfer_dir(transfer_id) / f"{file_id}__{safe}"
 
     @contextmanager
-    def open_write(
-        self, transfer_id: UUID, file_id: UUID, filename: str
-    ) -> Iterator[IO[bytes]]:
+    def open_write(self, transfer_id: UUID, file_id: UUID, filename: str) -> Iterator[IO[bytes]]:
         p = self.file_path(transfer_id, file_id, filename)
         p.parent.mkdir(parents=True, exist_ok=True)
         with open(p, "wb") as f:
@@ -68,10 +68,8 @@ class StagingService:
         for path in d.iterdir():
             if path.is_file():
                 _overwrite_and_unlink(path)
-        try:
+        with suppress(OSError):
             d.rmdir()
-        except OSError:
-            pass
 
 
 def _overwrite_and_unlink(path: Path) -> None:
@@ -91,7 +89,5 @@ def _overwrite_and_unlink(path: Path) -> None:
             os.fsync(f.fileno())
     except OSError:
         pass
-    try:
+    with suppress(FileNotFoundError):
         path.unlink()
-    except FileNotFoundError:
-        pass

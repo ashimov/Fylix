@@ -1,4 +1,5 @@
 """End-to-end email delivery via mailpit."""
+
 import asyncio
 import os
 
@@ -12,7 +13,6 @@ from app.worker.queues import EMAIL_QUEUE
 
 from .conftest import needs_mailpit
 
-
 MAILPIT_API = os.environ.get("MAILPIT_URL", "http://mailpit:8025")
 
 
@@ -25,12 +25,15 @@ async def _reset_mailpit() -> None:
         except Exception:
             pass
     async with SessionLocal() as session:
-        await session.execute(text(
-            "TRUNCATE TABLE transfers, transfer_recipients, transfer_files, "
-            "downloads, audit_log RESTART IDENTITY CASCADE"
-        ))
+        await session.execute(
+            text(
+                "TRUNCATE TABLE transfers, transfer_recipients, transfer_files, "
+                "downloads, audit_log RESTART IDENTITY CASCADE"
+            )
+        )
         await session.commit()
     from redis.asyncio import Redis
+
     r = Redis.from_url(app_settings.redis_url, decode_responses=False)
     await r.delete(EMAIL_QUEUE)
     await r.aclose()
@@ -41,16 +44,22 @@ async def _reset_mailpit() -> None:
 @pytest.mark.asyncio
 async def test_email_job_delivered_to_mailpit() -> None:
     """Push a job into email:queue, worker sends it, mailpit receives it."""
-    from redis.asyncio import Redis
     import json
 
+    from redis.asyncio import Redis
+
     r = Redis.from_url(app_settings.redis_url, decode_responses=False)
-    await r.lpush(EMAIL_QUEUE, json.dumps({
-        "to": "test@example.com",
-        "subject": "Hello from Fylix test",
-        "html": "<p>Hi</p>",
-        "text": "Hi",
-    }))
+    await r.lpush(
+        EMAIL_QUEUE,
+        json.dumps(
+            {
+                "to": "test@example.com",
+                "subject": "Hello from Fylix test",
+                "html": "<p>Hi</p>",
+                "text": "Hi",
+            }
+        ),
+    )
     await r.aclose()
 
     # Poll mailpit for the message

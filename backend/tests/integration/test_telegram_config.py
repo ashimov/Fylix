@@ -3,14 +3,13 @@ import os
 import httpx
 import pyotp
 import pytest
-from sqlalchemy import select, text
+from sqlalchemy import text
 
+from app.config import settings as app_settings
+from app.crypto import load_master_key
 from app.db import SessionLocal
 from app.models import Admin, Setting
 from app.services.auth import AuthService, wrap_totp_secret
-from app.crypto import load_master_key
-from app.config import settings as app_settings
-
 
 BASE = os.environ.get("PUBLIC_URL", "http://localhost:8000")
 
@@ -29,18 +28,25 @@ async def _login_admin(c: httpx.AsyncClient) -> str:
     secret = auth.generate_totp_secret()
     master = load_master_key(app_settings.master_key_path, enforce_perms=False)
     async with SessionLocal() as s:
-        s.add(Admin(
-            email="tg@test.co",
-            password_hash=auth.hash_password("StrongPw12345!"),
-            totp_secret=wrap_totp_secret(master, secret),
-            totp_enrolled=True,
-            role="admin",
-        ))
+        s.add(
+            Admin(
+                email="tg@test.co",
+                password_hash=auth.hash_password("StrongPw12345!"),
+                totp_secret=wrap_totp_secret(master, secret),
+                totp_enrolled=True,
+                role="admin",
+            )
+        )
         await s.commit()
     code = pyotp.TOTP(secret).now()
-    r = await c.post("/api/admin/login", json={
-        "email": "tg@test.co", "password": "StrongPw12345!", "totp_code": code,
-    })
+    r = await c.post(
+        "/api/admin/login",
+        json={
+            "email": "tg@test.co",
+            "password": "StrongPw12345!",
+            "totp_code": code,
+        },
+    )
     assert r.status_code == 200
     return c.cookies.get("csrf") or ""
 
@@ -64,12 +70,16 @@ async def test_get_telegram_reveals_no_token() -> None:
 async def test_patch_telegram_persists_changes() -> None:
     async with httpx.AsyncClient(base_url=BASE, verify=False) as c:
         csrf = await _login_admin(c)
-        r = await c.patch("/api/admin/telegram", json={
-            "bot_token": "1234:TOKEN",
-            "chat_id": "-100999",
-            "alert_on_storage_high": False,
-            "rate_limit_spike_threshold": 50,
-        }, headers={"X-CSRF-Token": csrf})
+        r = await c.patch(
+            "/api/admin/telegram",
+            json={
+                "bot_token": "1234:TOKEN",
+                "chat_id": "-100999",
+                "alert_on_storage_high": False,
+                "rate_limit_spike_threshold": 50,
+            },
+            headers={"X-CSRF-Token": csrf},
+        )
     assert r.status_code == 200
     body = r.json()
     assert body["bot_token_is_set"] is True
@@ -95,22 +105,30 @@ async def test_viewer_cannot_patch_telegram() -> None:
     secret = auth.generate_totp_secret()
     master = load_master_key(app_settings.master_key_path, enforce_perms=False)
     async with SessionLocal() as s:
-        s.add(Admin(
-            email="v@test.co",
-            password_hash=auth.hash_password("StrongPw12345!"),
-            totp_secret=wrap_totp_secret(master, secret),
-            totp_enrolled=True,
-            role="viewer",
-        ))
+        s.add(
+            Admin(
+                email="v@test.co",
+                password_hash=auth.hash_password("StrongPw12345!"),
+                totp_secret=wrap_totp_secret(master, secret),
+                totp_enrolled=True,
+                role="viewer",
+            )
+        )
         await s.commit()
 
     code = pyotp.TOTP(secret).now()
     async with httpx.AsyncClient(base_url=BASE, verify=False) as c:
-        login = await c.post("/api/admin/login", json={
-            "email": "v@test.co", "password": "StrongPw12345!", "totp_code": code,
-        })
+        login = await c.post(
+            "/api/admin/login",
+            json={
+                "email": "v@test.co",
+                "password": "StrongPw12345!",
+                "totp_code": code,
+            },
+        )
         assert login.status_code == 200
         csrf = c.cookies.get("csrf") or ""
-        r = await c.patch("/api/admin/telegram", json={"bot_token": "x"},
-                          headers={"X-CSRF-Token": csrf})
+        r = await c.patch(
+            "/api/admin/telegram", json={"bot_token": "x"}, headers={"X-CSRF-Token": csrf}
+        )
     assert r.status_code == 403

@@ -1,7 +1,8 @@
 """Create and look up Transfer aggregates."""
+
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from uuid import UUID, uuid4
 
@@ -29,7 +30,7 @@ class TransferService:
         sender_city: str | None = None,
         public_base_url: str = "",
     ) -> CreateTransferResponse:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         expires = now + timedelta(days=req.ttl_days)
         transfer_id = uuid4()
 
@@ -74,7 +75,7 @@ class TransferService:
                     extension=ext,
                     size_bytes=f.size,
                     object_key=f"{transfer_id}/{file_id}.enc",
-                    iv=b"\x00" * 12,          # placeholder — worker overwrites
+                    iv=b"\x00" * 12,  # placeholder — worker overwrites
                     sha256_cipher=b"\x00" * 32,
                 )
             )
@@ -95,23 +96,15 @@ class TransferService:
             expires_at=expires,
         )
 
-    async def get_by_download_token(
-        self, session: AsyncSession, token: str
-    ) -> Transfer | None:
-        row = await session.execute(
-            select(Transfer).where(Transfer.token == token)
-        )
+    async def get_by_download_token(self, session: AsyncSession, token: str) -> Transfer | None:
+        row = await session.execute(select(Transfer).where(Transfer.token == token))
         return row.scalar_one_or_none()
 
     async def get_by_manage_token(
         self, session: AsyncSession, manage_token: str
     ) -> Transfer | None:
-        row = await session.execute(
-            select(Transfer).where(Transfer.manage_token == manage_token)
-        )
+        row = await session.execute(select(Transfer).where(Transfer.manage_token == manage_token))
         return row.scalar_one_or_none()
 
-    async def get_by_id(
-        self, session: AsyncSession, transfer_id: UUID
-    ) -> Transfer | None:
+    async def get_by_id(self, session: AsyncSession, transfer_id: UUID) -> Transfer | None:
         return await session.get(Transfer, transfer_id)

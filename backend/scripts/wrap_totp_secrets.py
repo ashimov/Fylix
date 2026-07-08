@@ -5,6 +5,7 @@ Idempotent — rows that already look wrapped (40 bytes AES-KW output) are skipp
 Usage:
     docker compose exec api python scripts/wrap_totp_secrets.py
 """
+
 from __future__ import annotations
 
 import asyncio

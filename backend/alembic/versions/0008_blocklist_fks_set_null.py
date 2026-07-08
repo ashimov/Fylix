@@ -21,6 +21,7 @@ assigned default names following the convention `<table>_<col>_fkey`.
 The drop_constraint calls below use that exact default so no rename is
 needed on pre-existing installations.
 """
+
 from collections.abc import Sequence
 
 from alembic import op

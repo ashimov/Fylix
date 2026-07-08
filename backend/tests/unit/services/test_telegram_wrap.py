@@ -1,4 +1,5 @@
 """AES-KW envelope for Telegram bot tokens — mirrors the TOTP pattern."""
+
 from __future__ import annotations
 
 import os
@@ -11,7 +12,6 @@ from app.services.auth import (
     unwrap_telegram_token,
     wrap_telegram_token,
 )
-
 
 _SAMPLE = "123456789:ABCDefGhIjKlMnOpQrStUvWxYz0123456789"
 
@@ -58,28 +58,20 @@ def test_unwrap_falls_back_to_previous_master() -> None:
     previous = os.urandom(32)
     current = os.urandom(32)
     wrapped = wrap_telegram_token(previous, _SAMPLE)
-    assert (
-        unwrap_telegram_token(current, wrapped, previous_master_key=previous)
-        == _SAMPLE
-    )
+    assert unwrap_telegram_token(current, wrapped, previous_master_key=previous) == _SAMPLE
 
 
 def test_unwrap_prefers_current_when_both_valid() -> None:
     current = os.urandom(32)
     previous = os.urandom(32)
     wrapped = wrap_telegram_token(current, "NEW")
-    assert (
-        unwrap_telegram_token(current, wrapped, previous_master_key=previous)
-        == "NEW"
-    )
+    assert unwrap_telegram_token(current, wrapped, previous_master_key=previous) == "NEW"
 
 
 def test_unwrap_raises_when_neither_key_matches() -> None:
     wrapped = wrap_telegram_token(os.urandom(32), _SAMPLE)
     with pytest.raises(EnvelopeError):
-        unwrap_telegram_token(
-            os.urandom(32), wrapped, previous_master_key=os.urandom(32)
-        )
+        unwrap_telegram_token(os.urandom(32), wrapped, previous_master_key=os.urandom(32))
 
 
 def test_wrap_is_deterministic() -> None:

@@ -15,6 +15,7 @@ Set-Cookie — HawkAPI's `dict[str, str]` headers collapse duplicates, so
 we append cookies directly to the raw (bytes, bytes) header list on
 `http.response.start`.
 """
+
 from __future__ import annotations
 
 import secrets
@@ -38,8 +39,8 @@ def _parse_cookies(scope: Scope) -> dict[str, str]:
     jar: dict[str, str] = {}
     if not raw:
         return jar
-    for item in raw.decode("latin-1").split(";"):
-        item = item.strip()
+    for raw_item in raw.decode("latin-1").split(";"):
+        item = raw_item.strip()
         if not item or "=" not in item:
             continue
         name, _, value = item.partition("=")
@@ -50,7 +51,7 @@ def _parse_cookies(scope: Scope) -> dict[str, str]:
 def _get_header(scope: Scope, name_lc: bytes) -> str | None:
     for k, v in scope.get("headers", []):
         if k.lower() == name_lc:
-            return v.decode("latin-1")
+            return str(v.decode("latin-1"))
     return None
 
 

@@ -56,9 +56,7 @@ def unwrap_key(
         return aes_key_unwrap(master_key, wrapped)
     except InvalidUnwrap:
         if previous_master_key is None:
-            raise EnvelopeError(
-                "unwrap failed (wrong master key or tampered ciphertext)"
-            ) from None
+            raise EnvelopeError("unwrap failed (wrong master key or tampered ciphertext)") from None
         try:
             return aes_key_unwrap(previous_master_key, wrapped)
         except InvalidUnwrap as e:

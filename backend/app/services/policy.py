@@ -4,6 +4,7 @@ Raised as PolicyViolation with suggested HTTP status code.
 MIME validation is NOT done here — it happens in the worker against actual
 bytes after tus chunks arrive.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -34,9 +35,7 @@ class UploadPolicy:
     ) -> None:
         max_gb = await self.settings_service.get_int(session, "max_transfer_size_gb", 2)
         max_recipients = await self.settings_service.get_int(session, "max_recipients", 20)
-        blacklist_raw = await self.settings_service.get_list(
-            session, "extension_blacklist", []
-        )
+        blacklist_raw = await self.settings_service.get_list(session, "extension_blacklist", [])
 
         if recipient_count > max_recipients:
             raise PolicyViolation(

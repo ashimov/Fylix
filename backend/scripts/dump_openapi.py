@@ -17,6 +17,7 @@ Run locally:
 (Any dummy master-key path works — this script never reads the key; the
 ``load_master_key`` call is skipped because we don't enter lifespan.)
 """
+
 from __future__ import annotations
 
 import json

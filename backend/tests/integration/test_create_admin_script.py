@@ -1,4 +1,5 @@
 """End-to-end script-driven admin creation."""
+
 import subprocess
 
 import pytest
@@ -24,11 +25,16 @@ async def test_script_creates_admin_row() -> None:
         [
             "/opt/venv/bin/python",
             "scripts/create_admin.py",
-            "--email", "script@test.co",
-            "--password", "ScriptTest123!",
+            "--email",
+            "script@test.co",
+            "--password",
+            "ScriptTest123!",
         ],
         cwd="/app",
-        capture_output=True, text=True, timeout=30,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
     )
     assert proc.returncode == 0, f"stderr: {proc.stderr}"
     # Stdout should contain the otpauth:// URI
@@ -36,9 +42,9 @@ async def test_script_creates_admin_row() -> None:
     assert "Fylix" in proc.stdout
 
     async with SessionLocal() as session:
-        row = (await session.execute(
-            select(Admin).where(Admin.email == "script@test.co")
-        )).scalar_one()
+        row = (
+            await session.execute(select(Admin).where(Admin.email == "script@test.co"))
+        ).scalar_one()
         assert row.role == "admin"
         assert row.totp_enrolled is True
         assert row.totp_secret is not None
@@ -55,10 +61,16 @@ async def test_script_refuses_duplicate_email() -> None:
             [
                 "/opt/venv/bin/python",
                 "scripts/create_admin.py",
-                "--email", "dupe@test.co",
-                "--password", "DupeTest123!",
+                "--email",
+                "dupe@test.co",
+                "--password",
+                "DupeTest123!",
             ],
-            cwd="/app", capture_output=True, text=True, timeout=30,
+            cwd="/app",
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
         )
         if expected_code == 0:
             assert proc.returncode == 0

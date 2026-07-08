@@ -94,8 +94,7 @@ class Settings(BaseSettings):
             )
         if problems:
             raise ValueError(
-                "production app_env requires fail-closed security controls: "
-                + "; ".join(problems)
+                "production app_env requires fail-closed security controls: " + "; ".join(problems)
             )
         return self
 

@@ -2,6 +2,7 @@
 
 Gracefully becomes a no-op when bot token or chat id is empty (dev default).
 """
+
 from __future__ import annotations
 
 import logging
@@ -44,8 +45,10 @@ class TelegramClient:
             "parse_mode": parse_mode,
             "disable_web_page_preview": disable_web_preview,
         }
-        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as session:
-            async with session.post(url, json=payload) as resp:
-                body = await resp.text()
-                if resp.status >= 400:
-                    log.warning("telegram: sendMessage failed %d: %s", resp.status, body)
+        async with (
+            aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as session,
+            session.post(url, json=payload) as resp,
+        ):
+            body = await resp.text()
+            if resp.status >= 400:
+                log.warning("telegram: sendMessage failed %d: %s", resp.status, body)

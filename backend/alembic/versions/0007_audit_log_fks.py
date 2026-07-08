@@ -27,6 +27,7 @@ for an already-contaminated DB, delete the orphans then re-run:
      WHERE admin_id IS NOT NULL
        AND admin_id NOT IN (SELECT id FROM admins);
 """
+
 from collections.abc import Sequence
 
 from alembic import op
@@ -57,9 +58,5 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_constraint(
-        "audit_log_admin_id_fkey", "audit_log", type_="foreignkey"
-    )
-    op.drop_constraint(
-        "audit_log_transfer_id_fkey", "audit_log", type_="foreignkey"
-    )
+    op.drop_constraint("audit_log_admin_id_fkey", "audit_log", type_="foreignkey")
+    op.drop_constraint("audit_log_transfer_id_fkey", "audit_log", type_="foreignkey")

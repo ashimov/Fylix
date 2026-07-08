@@ -1,13 +1,14 @@
 """Cleanup worker integration test — via direct run_cleanup_once call, not scheduler."""
+
 import asyncio
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
+from urllib.parse import urlparse
 from uuid import UUID
 
 import httpx
 import pytest
 from sqlalchemy import select, text
-from urllib.parse import urlparse
 
 from app.config import settings as app_settings
 from app.db import SessionLocal
@@ -22,16 +23,20 @@ BASE = os.environ.get("PUBLIC_URL", "http://localhost:8000")
 @pytest.fixture(autouse=True)
 async def _clean_state() -> None:
     import shutil
+
     async with SessionLocal() as session:
-        await session.execute(text(
-            "TRUNCATE TABLE transfers, transfer_recipients, transfer_files, "
-            "downloads, audit_log RESTART IDENTITY CASCADE"
-        ))
+        await session.execute(
+            text(
+                "TRUNCATE TABLE transfers, transfer_recipients, transfer_files, "
+                "downloads, audit_log RESTART IDENTITY CASCADE"
+            )
+        )
         await session.commit()
     shutil.rmtree(app_settings.staging_dir, ignore_errors=True)
     app_settings.staging_dir.mkdir(parents=True, exist_ok=True)
 
     from redis.asyncio import Redis
+
     r = Redis.from_url(app_settings.redis_url)
     await r.delete("upload:ready")
     await r.aclose()
@@ -89,7 +94,7 @@ async def test_cleanup_marks_expired_and_deletes_minio() -> None:
     # Force-expire: set expires_at to the past
     async with SessionLocal() as session:
         t = await session.get(Transfer, transfer_id)
-        t.expires_at = datetime.now(timezone.utc) - timedelta(hours=1)
+        t.expires_at = datetime.now(UTC) - timedelta(hours=1)
         await session.commit()
 
     # Confirm MinIO has the object before cleanup
@@ -105,9 +110,7 @@ async def test_cleanup_marks_expired_and_deletes_minio() -> None:
     # Run cleanup
     staging = StagingService(root=app_settings.staging_dir)
     async with SessionLocal() as session:
-        processed = await run_cleanup_once(
-            session=session, staging=staging, storage=storage
-        )
+        processed = await run_cleanup_once(session=session, staging=staging, storage=storage)
     assert processed == 1
 
     # Verify state
@@ -117,9 +120,11 @@ async def test_cleanup_marks_expired_and_deletes_minio() -> None:
         assert t.wrapped_key is None
         assert t.deleted_at is not None
 
-        audits = (await session.execute(
-            select(AuditLog).where(AuditLog.event_type == "expired")
-        )).scalars().all()
+        audits = (
+            (await session.execute(select(AuditLog).where(AuditLog.event_type == "expired")))
+            .scalars()
+            .all()
+        )
         assert len(audits) == 1
 
     assert list(storage.list_transfer_keys(transfer_id)) == []
@@ -141,9 +146,7 @@ async def test_cleanup_skips_non_expired() -> None:
         secure=app_settings.minio_secure,
     )
     async with SessionLocal() as session:
-        processed = await run_cleanup_once(
-            session=session, staging=staging, storage=storage
-        )
+        processed = await run_cleanup_once(session=session, staging=staging, storage=storage)
     assert processed == 0
 
     async with SessionLocal() as session:
@@ -168,7 +171,7 @@ async def test_cleanup_does_not_touch_revoked_or_deleted() -> None:
     async with SessionLocal() as session:
         for b in (body_r, body_d):
             t = await session.get(Transfer, UUID(b["transfer_id"]))
-            t.expires_at = datetime.now(timezone.utc) - timedelta(hours=1)
+            t.expires_at = datetime.now(UTC) - timedelta(hours=1)
         await session.commit()
 
     staging = StagingService(root=app_settings.staging_dir)
@@ -180,9 +183,7 @@ async def test_cleanup_does_not_touch_revoked_or_deleted() -> None:
         secure=app_settings.minio_secure,
     )
     async with SessionLocal() as session:
-        processed = await run_cleanup_once(
-            session=session, staging=staging, storage=storage
-        )
+        processed = await run_cleanup_once(session=session, staging=staging, storage=storage)
     assert processed == 0  # neither ready
 
     async with SessionLocal() as session:

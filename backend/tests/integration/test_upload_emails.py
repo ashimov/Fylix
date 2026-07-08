@@ -1,4 +1,5 @@
 """Full POST → PATCH → worker encrypt → mailpit receives recipient + sender emails."""
+
 import asyncio
 import os
 import shutil
@@ -11,10 +12,8 @@ from sqlalchemy import text
 
 from app.config import settings as app_settings
 from app.db import SessionLocal
-from app.models import Transfer
 
 from .conftest import needs_mailpit
-
 
 BASE = os.environ.get("PUBLIC_URL", "http://localhost:8000")
 MAILPIT_API = os.environ.get("MAILPIT_URL", "http://mailpit:8025")
@@ -23,15 +22,18 @@ MAILPIT_API = os.environ.get("MAILPIT_URL", "http://mailpit:8025")
 @pytest.fixture(autouse=True)
 async def _reset_all() -> None:
     async with SessionLocal() as session:
-        await session.execute(text(
-            "TRUNCATE TABLE transfers, transfer_recipients, transfer_files, "
-            "downloads, audit_log RESTART IDENTITY CASCADE"
-        ))
+        await session.execute(
+            text(
+                "TRUNCATE TABLE transfers, transfer_recipients, transfer_files, "
+                "downloads, audit_log RESTART IDENTITY CASCADE"
+            )
+        )
         await session.commit()
     shutil.rmtree(app_settings.staging_dir, ignore_errors=True)
     app_settings.staging_dir.mkdir(parents=True, exist_ok=True)
 
     from redis.asyncio import Redis
+
     r = Redis.from_url(app_settings.redis_url)
     await r.delete("upload:ready")
     await r.delete("email:queue")
@@ -49,16 +51,19 @@ async def _reset_all() -> None:
 @pytest.mark.asyncio
 async def test_upload_enqueues_recipient_and_sender_emails() -> None:
     async with httpx.AsyncClient(base_url=BASE, verify=False) as c:
-        resp = await c.post("/api/transfers", json={
-            "sender_email": "alice@example.com",
-            "recipient_emails": ["bob@example.com"],
-            "message": "see files",
-            "ttl_days": 1,
-            "files": [{"filename": "f.txt", "size": 5}],
-        })
+        resp = await c.post(
+            "/api/transfers",
+            json={
+                "sender_email": "alice@example.com",
+                "recipient_emails": ["bob@example.com"],
+                "message": "see files",
+                "ttl_days": 1,
+                "files": [{"filename": "f.txt", "size": 5}],
+            },
+        )
         assert resp.status_code == 201
         body = resp.json()
-        transfer_id = UUID(body["transfer_id"])
+        UUID(body["transfer_id"])
         patch = await c.patch(
             urlparse(body["upload_urls"]["f.txt"]).path,
             content=b"hello",
@@ -91,12 +96,15 @@ async def test_upload_enqueues_recipient_and_sender_emails() -> None:
 @pytest.mark.asyncio
 async def test_multi_recipient_sends_multiple_emails() -> None:
     async with httpx.AsyncClient(base_url=BASE, verify=False) as c:
-        resp = await c.post("/api/transfers", json={
-            "sender_email": "s@example.com",
-            "recipient_emails": ["a@x.co", "b@x.co", "c@x.co"],
-            "ttl_days": 1,
-            "files": [{"filename": "f.txt", "size": 3}],
-        })
+        resp = await c.post(
+            "/api/transfers",
+            json={
+                "sender_email": "s@example.com",
+                "recipient_emails": ["a@x.co", "b@x.co", "c@x.co"],
+                "ttl_days": 1,
+                "files": [{"filename": "f.txt", "size": 3}],
+            },
+        )
         body = resp.json()
         patch = await c.patch(
             urlparse(body["upload_urls"]["f.txt"]).path,

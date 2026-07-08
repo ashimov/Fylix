@@ -1,8 +1,9 @@
 """Admin analytics endpoint with Redis 60s cache."""
+
 from __future__ import annotations
 
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import httpx
@@ -13,7 +14,7 @@ from sqlalchemy import text
 
 from app.config import settings
 from app.db import SessionLocal
-from app.models import Admin, AuditLog, Download, Transfer, TransferFile, TransferRecipient
+from app.models import Admin, AuditLog, Download, Transfer, TransferFile
 from app.services.auth import AuthService
 
 BASE = os.environ.get("PUBLIC_URL", "http://localhost:8000")
@@ -48,23 +49,30 @@ async def _seed_admin(role: str = "admin") -> tuple[str, str]:
     secret = auth.generate_totp_secret()
     email = f"{role}_{uuid4().hex[:6]}@test.co"
     async with SessionLocal() as s:
-        s.add(Admin(
-            email=email,
-            password_hash=auth.hash_password("StrongPw123!"),
-            totp_secret=secret.encode("utf-8"),
-            totp_enrolled=True,
-            role=role,
-            disabled=False,
-        ))
+        s.add(
+            Admin(
+                email=email,
+                password_hash=auth.hash_password("StrongPw123!"),
+                totp_secret=secret.encode("utf-8"),
+                totp_enrolled=True,
+                role=role,
+                disabled=False,
+            )
+        )
         await s.commit()
     return email, secret
 
 
 async def _login(c: httpx.AsyncClient, email: str, secret: str) -> str:
     code = pyotp.TOTP(secret).now()
-    r = await c.post("/api/admin/login", json={
-        "email": email, "password": "StrongPw123!", "totp_code": code,
-    })
+    r = await c.post(
+        "/api/admin/login",
+        json={
+            "email": email,
+            "password": "StrongPw123!",
+            "totp_code": code,
+        },
+    )
     assert r.status_code == 200, r.text
     return c.cookies.get("csrf") or ""
 
@@ -80,34 +88,40 @@ async def _seed_transfer_with_data() -> None:
             status="ready",
             total_size=2 * 1024 * 1024,  # 2 MB
             file_count=1,
-            expires_at=datetime.now(timezone.utc) + timedelta(days=7),
+            expires_at=datetime.now(UTC) + timedelta(days=7),
             wrapped_key=b"fakewrappedkey",
         )
         s.add(t)
         await s.flush()
         tid = t.id
-        s.add(TransferFile(
-            transfer_id=tid,
-            filename="doc.pdf",
-            safe_filename="doc.pdf",
-            mime_type="application/pdf",
-            size_bytes=2 * 1024 * 1024,
-            object_key=f"{tid}/file.enc",
-            iv=b"\x00" * 12,
-            sha256_cipher=b"\x00" * 32,
-        ))
-        s.add(Download(
-            transfer_id=tid,
-            ip="10.0.0.2",
-            started_at=datetime.now(timezone.utc),
-            bytes_sent=1024,
-            aborted=False,
-        ))
-        s.add(AuditLog(
-            ts=datetime.now(timezone.utc),
-            event_type="test_event",
-            severity="info",
-        ))
+        s.add(
+            TransferFile(
+                transfer_id=tid,
+                filename="doc.pdf",
+                safe_filename="doc.pdf",
+                mime_type="application/pdf",
+                size_bytes=2 * 1024 * 1024,
+                object_key=f"{tid}/file.enc",
+                iv=b"\x00" * 12,
+                sha256_cipher=b"\x00" * 32,
+            )
+        )
+        s.add(
+            Download(
+                transfer_id=tid,
+                ip="10.0.0.2",
+                started_at=datetime.now(UTC),
+                bytes_sent=1024,
+                aborted=False,
+            )
+        )
+        s.add(
+            AuditLog(
+                ts=datetime.now(UTC),
+                event_type="test_event",
+                severity="info",
+            )
+        )
         await s.commit()
 
 

@@ -22,6 +22,7 @@ Non-concurrently is fine in a maintenance window; switch to
 `postgresql_concurrently=True` + out-of-transaction if the deployment
 can't afford the brief lock.
 """
+
 from collections.abc import Sequence
 
 from alembic import op

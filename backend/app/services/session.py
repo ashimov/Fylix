@@ -25,12 +25,13 @@ logouts on routine browser updates. Legacy session JSON blobs that
 still contain an ua_hash key continue to load cleanly; the field is
 simply ignored.
 """
+
 from __future__ import annotations
 
 import json
 import secrets
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID
 
 from redis.asyncio import Redis
@@ -62,7 +63,7 @@ class SessionStore:
 
     async def create(self, *, admin_id: UUID) -> str:
         sid = _sid()
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         payload = {
             "admin_id": str(admin_id),
             "issued_at": now.isoformat(),
@@ -92,7 +93,7 @@ class SessionStore:
         if raw is None:
             return False
         data = json.loads(raw)
-        data["last_active"] = datetime.now(timezone.utc).isoformat()
+        data["last_active"] = datetime.now(UTC).isoformat()
 
         # Refresh BOTH the session and the admin's session-index set, so a
         # subsequent destroy_all_for() still sees every live session.
@@ -121,10 +122,7 @@ class SessionStore:
         members = await self.redis.smembers(self._index_key(admin_id))  # type: ignore[misc]
         if not members:
             return 0
-        sid_keys = [
-            self._session_key(m.decode() if isinstance(m, bytes) else m)
-            for m in members
-        ]
+        sid_keys = [self._session_key(m.decode() if isinstance(m, bytes) else m) for m in members]
         pipe = self.redis.pipeline()
         pipe.delete(*sid_keys)
         pipe.delete(self._index_key(admin_id))

@@ -4,10 +4,11 @@ and rejects header-injection via stray `"` / CR / LF in the quoted-string.
 Also covers the `client_ip` helper that reads X-Forwarded-For with a
 fallback to `request.client.host`.
 """
+
 from __future__ import annotations
 
 from types import SimpleNamespace
-from typing import Any, cast
+from typing import Any
 
 from app.utils.http import client_ip, content_disposition_attachment
 
@@ -66,9 +67,7 @@ def test_explicit_ascii_fallback_used_verbatim() -> None:
 
 
 def test_explicit_ascii_fallback_also_strips_crlf() -> None:
-    header = content_disposition_attachment(
-        "ok.pdf", ascii_fallback='dangerous".pdf\r\nX: y'
-    )
+    header = content_disposition_attachment("ok.pdf", ascii_fallback='dangerous".pdf\r\nX: y')
     assert "\r" not in header
     assert "\n" not in header
 

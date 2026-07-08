@@ -53,9 +53,7 @@ def test_unwrap_totp_falls_back_to_previous_master() -> None:
     previous_master = os.urandom(32)
     current_master = os.urandom(32)
     wrapped = wrap_totp_secret(previous_master, "OLDSECRET")
-    recovered = unwrap_totp_secret(
-        current_master, wrapped, previous_master_key=previous_master
-    )
+    recovered = unwrap_totp_secret(current_master, wrapped, previous_master_key=previous_master)
     assert recovered == "OLDSECRET"
 
 
@@ -63,24 +61,18 @@ def test_unwrap_totp_prefers_current_when_both_valid() -> None:
     current_master = os.urandom(32)
     previous_master = os.urandom(32)
     wrapped = wrap_totp_secret(current_master, "NEWSECRET")
-    recovered = unwrap_totp_secret(
-        current_master, wrapped, previous_master_key=previous_master
-    )
+    recovered = unwrap_totp_secret(current_master, wrapped, previous_master_key=previous_master)
     assert recovered == "NEWSECRET"
 
 
 def test_unwrap_totp_raises_when_neither_key_matches() -> None:
     wrapped = wrap_totp_secret(os.urandom(32), "ORIG")
     with pytest.raises(EnvelopeError):
-        unwrap_totp_secret(
-            os.urandom(32), wrapped, previous_master_key=os.urandom(32)
-        )
+        unwrap_totp_secret(os.urandom(32), wrapped, previous_master_key=os.urandom(32))
 
 
 def test_unwrap_totp_previous_none_preserves_legacy_behavior() -> None:
     master = os.urandom(32)
     wrapped = wrap_totp_secret(master, "ORIG")
     with pytest.raises(EnvelopeError):
-        unwrap_totp_secret(
-            os.urandom(32), wrapped, previous_master_key=None
-        )
+        unwrap_totp_secret(os.urandom(32), wrapped, previous_master_key=None)

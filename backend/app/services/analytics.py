@@ -1,16 +1,16 @@
 """Analytics aggregation service with Redis 60s cache."""
+
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from redis.asyncio import Redis
-from sqlalchemy import cast, func, select, text
-from sqlalchemy.dialects.postgresql import INET
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import AuditLog, Download, Transfer, TransferFile
+from app.models import AuditLog, Transfer, TransferFile
 
 
 class AnalyticsService:
@@ -21,15 +21,16 @@ class AnalyticsService:
         cache_key = f"analytics:{days}"
         cached = await self._redis.get(cache_key)
         if cached is not None:
-            return json.loads(cached)
+            payload: dict[str, Any] = json.loads(cached)
+            return payload
 
         result = await self._compute(session, days=days)
         await self._redis.setex(cache_key, 60, json.dumps(result, default=str))
         return result
 
     async def _compute(self, session: AsyncSession, *, days: int) -> dict[str, Any]:
-        since = datetime.now(timezone.utc) - timedelta(days=days)
-        today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+        since = datetime.now(UTC) - timedelta(days=days)
+        today_start = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
         week_start = today_start - timedelta(days=7)
 
         kpi = await self._kpi(session, today_start=today_start, week_start=week_start)
@@ -68,12 +69,12 @@ class AnalyticsService:
                 select(
                     func.count().filter(active_pred).label("active"),
                     func.count().filter(infected_pred).label("infected"),
-                    func.coalesce(
-                        func.sum(Transfer.total_size).filter(today_pred), 0
-                    ).label("traffic_today"),
-                    func.coalesce(
-                        func.sum(Transfer.total_size).filter(week_pred), 0
-                    ).label("traffic_week"),
+                    func.coalesce(func.sum(Transfer.total_size).filter(today_pred), 0).label(
+                        "traffic_today"
+                    ),
+                    func.coalesce(func.sum(Transfer.total_size).filter(week_pred), 0).label(
+                        "traffic_week"
+                    ),
                 )
             )
         ).one()
@@ -90,8 +91,8 @@ class AnalyticsService:
 
         return {
             "active_transfers": row.active,
-            "traffic_today_gb": round(int(row.traffic_today) / (1024 ** 3), 4),
-            "traffic_week_gb": round(int(row.traffic_week) / (1024 ** 3), 4),
+            "traffic_today_gb": round(int(row.traffic_today) / (1024**3), 4),
+            "traffic_week_gb": round(int(row.traffic_week) / (1024**3), 4),
             "infected_count": row.infected,
             "rate_limit_blocks_today": rl_blocks,
         }
@@ -99,80 +100,88 @@ class AnalyticsService:
     async def _daily_transfers(
         self, session: AsyncSession, *, since: datetime
     ) -> list[dict[str, Any]]:
-        rows = (await session.execute(
-            select(
-                func.date_trunc("day", Transfer.created_at).label("day"),
-                func.count().label("count"),
+        rows = (
+            await session.execute(
+                select(
+                    func.date_trunc("day", Transfer.created_at).label("day"),
+                    func.count().label("count"),
+                )
+                .where(Transfer.created_at >= since)
+                .group_by(text("day"))
+                .order_by(text("day"))
             )
-            .where(Transfer.created_at >= since)
-            .group_by(text("day"))
-            .order_by(text("day"))
-        )).all()
+        ).all()
         return [{"date": str(r.day.date()), "count": r.count} for r in rows]
 
     async def _top_countries(
         self, session: AsyncSession, *, since: datetime
     ) -> list[dict[str, Any]]:
-        rows = (await session.execute(
-            select(Transfer.sender_country, func.count().label("count"))
-            .where(Transfer.created_at >= since)
-            .group_by(Transfer.sender_country)
-            .order_by(func.count().desc())
-            .limit(10)
-        )).all()
+        rows = (
+            await session.execute(
+                select(Transfer.sender_country, func.count().label("count"))
+                .where(Transfer.created_at >= since)
+                .group_by(Transfer.sender_country)
+                .order_by(func.count().desc())
+                .limit(10)
+            )
+        ).all()
         return [{"country": r.sender_country, "count": r.count} for r in rows]
 
-    async def _top_mime(
-        self, session: AsyncSession, *, since: datetime
-    ) -> list[dict[str, Any]]:
-        rows = (await session.execute(
-            select(TransferFile.mime_type, func.count().label("count"))
-            .join(Transfer, Transfer.id == TransferFile.transfer_id)
-            .where(Transfer.created_at >= since)
-            .group_by(TransferFile.mime_type)
-            .order_by(func.count().desc())
-            .limit(10)
-        )).all()
+    async def _top_mime(self, session: AsyncSession, *, since: datetime) -> list[dict[str, Any]]:
+        rows = (
+            await session.execute(
+                select(TransferFile.mime_type, func.count().label("count"))
+                .join(Transfer, Transfer.id == TransferFile.transfer_id)
+                .where(Transfer.created_at >= since)
+                .group_by(TransferFile.mime_type)
+                .order_by(func.count().desc())
+                .limit(10)
+            )
+        ).all()
         return [{"mime_type": r.mime_type, "count": r.count} for r in rows]
 
-    async def _top_ips(
-        self, session: AsyncSession, *, since: datetime
-    ) -> list[dict[str, Any]]:
-        rows = (await session.execute(
-            select(Transfer.sender_ip, func.count().label("count"))
-            .where(Transfer.created_at >= since)
-            .group_by(Transfer.sender_ip)
-            .order_by(func.count().desc())
-            .limit(10)
-        )).all()
+    async def _top_ips(self, session: AsyncSession, *, since: datetime) -> list[dict[str, Any]]:
+        rows = (
+            await session.execute(
+                select(Transfer.sender_ip, func.count().label("count"))
+                .where(Transfer.created_at >= since)
+                .group_by(Transfer.sender_ip)
+                .order_by(func.count().desc())
+                .limit(10)
+            )
+        ).all()
         return [{"ip": str(r.sender_ip), "count": r.count} for r in rows]
 
     async def _top_sender_domains(
         self, session: AsyncSession, *, since: datetime
     ) -> list[dict[str, Any]]:
-        rows = (await session.execute(
-            select(
-                func.split_part(Transfer.sender_email, "@", 2).label("domain"),
-                func.count().label("count"),
+        rows = (
+            await session.execute(
+                select(
+                    func.split_part(Transfer.sender_email, "@", 2).label("domain"),
+                    func.count().label("count"),
+                )
+                .where(Transfer.created_at >= since)
+                .group_by(text("domain"))
+                .order_by(func.count().desc())
+                .limit(10)
             )
-            .where(Transfer.created_at >= since)
-            .group_by(text("domain"))
-            .order_by(func.count().desc())
-            .limit(10)
-        )).all()
+        ).all()
         return [{"domain": r.domain, "count": r.count} for r in rows]
 
     async def _infected_timeline(
         self, session: AsyncSession, *, since: datetime
     ) -> list[dict[str, Any]]:
-        rows = (await session.execute(
-            select(
-                func.date_trunc("day", AuditLog.ts).label("day"),
-                func.count().label("count"),
+        rows = (
+            await session.execute(
+                select(
+                    func.date_trunc("day", AuditLog.ts).label("day"),
+                    func.count().label("count"),
+                )
+                .where(AuditLog.event_type == "infected")
+                .where(AuditLog.ts >= since)
+                .group_by(text("day"))
+                .order_by(text("day"))
             )
-            .where(AuditLog.event_type == "infected")
-            .where(AuditLog.ts >= since)
-            .group_by(text("day"))
-            .order_by(text("day"))
-        )).all()
+        ).all()
         return [{"date": str(r.day.date()), "count": r.count} for r in rows]

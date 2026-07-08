@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import io
 import logging
 from collections.abc import AsyncIterator, Iterator
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from html import escape
 from http.client import IncompleteRead
 from uuid import UUID
@@ -18,11 +19,11 @@ _aiter_log = logging.getLogger("fylix.public.stream")
 # but urllib3 surfaces them as exceptions which would otherwise be
 # captured as ERRORs by Sentry/GlitchTip and pollute the issue tracker.
 _CLIENT_DISCONNECT_EXC = (
-    ProtocolError,           # urllib3 — wraps IncompleteRead in chunked replies
-    IncompleteRead,           # http.client — raw socket close mid-body
+    ProtocolError,  # urllib3 — wraps IncompleteRead in chunked replies
+    IncompleteRead,  # http.client — raw socket close mid-body
     BrokenPipeError,
     ConnectionResetError,
-    asyncio.CancelledError,   # ASGI cancels the task when the client drops
+    asyncio.CancelledError,  # ASGI cancels the task when the client drops
 )
 
 
@@ -44,14 +45,12 @@ async def _aiter_from_sync(it: Iterator[bytes]) -> AsyncIterator[bytes]:
         for chunk in it:
             yield chunk
     except _CLIENT_DISCONNECT_EXC as exc:
-        _aiter_log.info("client disconnected during stream: %s: %s",
-                        type(exc).__name__, exc)
+        _aiter_log.info("client disconnected during stream: %s: %s", type(exc).__name__, exc)
         return
+
 
 from hawkapi import Depends, Request, Response, Router, status
 from hawkapi.responses import HTMLResponse, StreamingResponse
-
-from app.http import HTTPException
 from redis.asyncio import Redis
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -61,6 +60,7 @@ from app.config import settings
 from app.crypto import unwrap_key
 from app.crypto.stream import decrypt_stream_iter
 from app.db import SessionLocal
+from app.http import HTTPException
 from app.models import AuditLog, Download, Transfer, TransferFile, TransferRecipient
 from app.schemas.transfer import (
     CreateTransferRequest,
@@ -124,7 +124,8 @@ _DOWNLOAD_PAGE_TMPL = """<!doctype html>
   .msg {{ background: #EDEEF5; padding: 12px 16px; border-radius: 8px;
           white-space: pre-wrap; margin-bottom: 20px; }}
   ul {{ list-style: none; padding: 0; margin: 0 0 24px; }}
-  li {{ padding: 10px 0; border-bottom: 1px solid #E8EBF4; display: flex; justify-content: space-between; }}
+  li {{ padding: 10px 0; border-bottom: 1px solid #E8EBF4; display: flex;
+        justify-content: space-between; }}
   li:last-child {{ border-bottom: none; }}
   a.btn {{ display: inline-block; background: #272666; color: #fff; padding: 12px 24px;
            border-radius: 8px; text-decoration: none; font-weight: 600; }}
@@ -225,13 +226,15 @@ async def _load_ready_transfer(
         raise HTTPException(404, "not found")
     if t.status != "ready":
         raise HTTPException(404, "not found")
-    if t.expires_at <= datetime.now(timezone.utc):
+    if t.expires_at <= datetime.now(UTC):
         raise HTTPException(410, "gone")
     if t.wrapped_key is None:
         raise HTTPException(404, "not found")
-    files = (await session.execute(
-        select(TransferFile).where(TransferFile.transfer_id == t.id)
-    )).scalars().all()
+    files = (
+        (await session.execute(select(TransferFile).where(TransferFile.transfer_id == t.id)))
+        .scalars()
+        .all()
+    )
     return t, list(files)
 
 
@@ -310,7 +313,9 @@ async def create_transfer(
     sender_country: str | None = None
     geoip = _get_geoip()
     geoip_enabled = await _settings_service.get_bool(session, "geoip_enabled", False)
-    allowed_countries = await _settings_service.get_list(session, "geoip_countries", ["KZ", "UZ", "KG"])
+    allowed_countries = await _settings_service.get_list(
+        session, "geoip_countries", ["KZ", "UZ", "KG"]
+    )
     if geoip.enabled:
         sender_country = geoip.country(client_ip)
         if geoip_enabled and not geoip.is_country_allowed(client_ip, allowed=allowed_countries):
@@ -340,7 +345,10 @@ async def create_transfer(
             ip=client_ip,
             details={"reason": e.reason, "status": e.status_code},
         )
-        raise HTTPException(status_code=e.status_code, detail={"error": "policy_violation", "reason": e.reason})
+        raise HTTPException(
+            status_code=e.status_code,
+            detail={"error": "policy_violation", "reason": e.reason},
+        ) from None
 
     # Good — create the transfer.
     resp = await svc.create(
@@ -368,7 +376,7 @@ async def tus_head(
     try:
         state = await tus.handle_head(session, transfer_id, file_id)
     except TusError as e:
-        raise HTTPException(e.status_code, e.detail)
+        raise HTTPException(e.status_code, e.detail) from None
     return Response(
         status_code=200,
         headers={
@@ -397,7 +405,7 @@ async def tus_patch(
     try:
         upload_offset = int(request.headers.get("upload-offset", ""))
     except ValueError:
-        raise HTTPException(400, "invalid Upload-Offset header")
+        raise HTTPException(400, "invalid Upload-Offset header") from None
 
     body = await request.body()
     try:
@@ -405,7 +413,7 @@ async def tus_patch(
             session, transfer_id, file_id, upload_offset, io.BytesIO(body)
         )
     except TusError as e:
-        raise HTTPException(e.status_code, e.detail)
+        raise HTTPException(e.status_code, e.detail) from None
     await session.commit()
     return Response(
         status_code=204,
@@ -428,13 +436,10 @@ async def download_page(
 ) -> HTMLResponse:
     t, files = await _load_ready_transfer(session, token)
     files_html = "".join(
-        f"<li><span>{escape(f.filename)}</span>"
-        f"<span>{_humansize(f.size_bytes)}</span></li>"
+        f"<li><span>{escape(f.filename)}</span>" f"<span>{_humansize(f.size_bytes)}</span></li>"
         for f in files
     )
-    message_block = (
-        f'<div class="msg">{escape(t.message)}</div>' if t.message else ""
-    )
+    message_block = f'<div class="msg">{escape(t.message)}</div>' if t.message else ""
     html = _DOWNLOAD_PAGE_TMPL.format(
         expires_at=t.expires_at.strftime("%Y-%m-%d %H:%M UTC"),
         message_block=message_block,
@@ -459,7 +464,6 @@ async def download_file(
 ) -> StreamingResponse:
     import json as _json
 
-
     t, files = await _load_ready_transfer(session, token)
     tf = next((f for f in files if f.id == file_id), None)
     if tf is None:
@@ -475,10 +479,8 @@ async def download_file(
     client_ip = _client_ip(request)
     geoip = _get_geoip()
     download_country = None
-    try:
+    with contextlib.suppress(Exception):
         download_country = geoip.country(client_ip)
-    except Exception:
-        pass
 
     # Record the Download row BEFORE returning StreamingResponse so it is
     # persisted even if the client disconnects mid-transfer.
@@ -500,19 +502,22 @@ async def download_file(
             download_ip=client_ip,
             download_country=download_country,
             file_count=1,
-            at=datetime.now(timezone.utc),
+            at=datetime.now(UTC),
         )
         await redis.lpush(  # type: ignore[misc]
             "email:queue",
-            _json.dumps({
-                "to": t.sender_email,
-                "subject": notice.subject,
-                "html": notice.html,
-                "text": notice.text,
-            }),
+            _json.dumps(
+                {
+                    "to": t.sender_email,
+                    "subject": notice.subject,
+                    "html": notice.html,
+                    "text": notice.text,
+                }
+            ),
         )
     except Exception:
         import logging as _logging
+
         _logging.getLogger(__name__).exception("download_file: failed to enqueue notice email")
 
     await session.commit()
@@ -552,7 +557,6 @@ async def download_zip(
 ) -> StreamingResponse:
     import json as _json
 
-
     t, files = await _load_ready_transfer(session, token)
     master_key = get_master_key()
     file_key = unwrap_key(
@@ -564,10 +568,8 @@ async def download_zip(
     client_ip = _client_ip(request)
     geoip = _get_geoip()
     download_country = None
-    try:
+    with contextlib.suppress(Exception):
         download_country = geoip.country(client_ip)
-    except Exception:
-        pass
 
     # Record one Download row per file in the ZIP (per-file telemetry).
     total_bytes = 0
@@ -591,19 +593,22 @@ async def download_zip(
             download_ip=client_ip,
             download_country=download_country,
             file_count=len(files),
-            at=datetime.now(timezone.utc),
+            at=datetime.now(UTC),
         )
         await redis.lpush(  # type: ignore[misc]
             "email:queue",
-            _json.dumps({
-                "to": t.sender_email,
-                "subject": notice.subject,
-                "html": notice.html,
-                "text": notice.text,
-            }),
+            _json.dumps(
+                {
+                    "to": t.sender_email,
+                    "subject": notice.subject,
+                    "html": notice.html,
+                    "text": notice.text,
+                }
+            ),
         )
     except Exception:
         import logging as _logging
+
         _logging.getLogger(__name__).exception("download_zip: failed to enqueue notice email")
 
     # Telegram notification (direct, not through alerts which is for security severity)
@@ -618,13 +623,14 @@ async def download_zip(
         )
     except Exception:
         import logging as _logging
+
         _logging.getLogger(__name__).exception("telegram download notice failed")
 
     await session.commit()
 
     # UTC-aware — stream_zip expects tz-aware; naive datetime produces wrong
     # timestamps on any non-UTC host.
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     # 0o600: owner rw-only when extracted
     perms = 0o600
     _zip_file_key = file_key
@@ -662,9 +668,7 @@ async def download_zip(
 
 
 async def _load_by_manage_token(session: AsyncSession, manage_token: str) -> Transfer:
-    row = await session.execute(
-        select(Transfer).where(Transfer.manage_token == manage_token)
-    )
+    row = await session.execute(select(Transfer).where(Transfer.manage_token == manage_token))
     t = row.scalar_one_or_none()
     if t is None:
         raise HTTPException(404, "not found")
@@ -677,17 +681,31 @@ async def sender_panel(
     session: AsyncSession = Depends(_session),
 ) -> SenderPanelResponse:
     t = await _load_by_manage_token(session, manage_token)
-    files = (await session.execute(
-        select(TransferFile).where(TransferFile.transfer_id == t.id)
-    )).scalars().all()
-    recipients = (await session.execute(
-        select(TransferRecipient).where(TransferRecipient.transfer_id == t.id)
-    )).scalars().all()
-    downloads = (await session.execute(
-        select(Download)
-        .where(Download.transfer_id == t.id)
-        .order_by(Download.started_at.desc())
-    )).scalars().all()
+    files = (
+        (await session.execute(select(TransferFile).where(TransferFile.transfer_id == t.id)))
+        .scalars()
+        .all()
+    )
+    recipients = (
+        (
+            await session.execute(
+                select(TransferRecipient).where(TransferRecipient.transfer_id == t.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    downloads = (
+        (
+            await session.execute(
+                select(Download)
+                .where(Download.transfer_id == t.id)
+                .order_by(Download.started_at.desc())
+            )
+        )
+        .scalars()
+        .all()
+    )
 
     return SenderPanelResponse(
         transfer_id=t.id,
@@ -732,23 +750,23 @@ async def sender_delete(
     if t.status in ("deleted",):
         # idempotent — already deleted
         return Response(status_code=204)
-    try:
+    # even if MinIO has trouble, proceed with DB state change so the
+    # link no longer resolves. Admin can sweep orphaned objects later.
+    with contextlib.suppress(Exception):
         storage.delete_transfer(t.id)
-    except Exception:
-        # even if MinIO has trouble, proceed with DB state change so the
-        # link no longer resolves. Admin can sweep orphaned objects later.
-        pass
     t.status = "deleted"
     t.wrapped_key = None
-    t.deleted_at = datetime.now(timezone.utc)
-    session.add(AuditLog(
-        ts=datetime.now(timezone.utc),
-        event_type="sender_delete",
-        severity="info",
-        ip=((_client_ip(request) if request.client else None)),
-        transfer_id=t.id,
-        details={"by": "manage_token"},
-    ))
+    t.deleted_at = datetime.now(UTC)
+    session.add(
+        AuditLog(
+            ts=datetime.now(UTC),
+            event_type="sender_delete",
+            severity="info",
+            ip=(_client_ip(request) if request.client else None),
+            transfer_id=t.id,
+            details={"by": "manage_token"},
+        )
+    )
     await session.commit()
     return Response(status_code=204)
 
@@ -763,14 +781,16 @@ async def sender_revoke(
     if t.status in ("revoked", "deleted", "expired", "infected"):
         return Response(status_code=204)
     t.status = "revoked"
-    t.revoked_at = datetime.now(timezone.utc)
-    session.add(AuditLog(
-        ts=datetime.now(timezone.utc),
-        event_type="sender_revoke",
-        severity="info",
-        ip=((_client_ip(request) if request.client else None)),
-        transfer_id=t.id,
-        details={"by": "manage_token"},
-    ))
+    t.revoked_at = datetime.now(UTC)
+    session.add(
+        AuditLog(
+            ts=datetime.now(UTC),
+            event_type="sender_revoke",
+            severity="info",
+            ip=(_client_ip(request) if request.client else None),
+            transfer_id=t.id,
+            details={"by": "manage_token"},
+        )
+    )
     await session.commit()
     return Response(status_code=204)

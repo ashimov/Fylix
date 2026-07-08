@@ -5,6 +5,7 @@ recipient notification, sender confirmation, sender download notice.
 
 Subjects are hard-coded per (locale, kind) since they don't need template logic.
 """
+
 from __future__ import annotations
 
 import enum
@@ -71,14 +72,14 @@ class EmailRenderer:
         total_bytes: int,
         expires_at: datetime,
     ) -> RenderedEmail:
-        ctx = dict(
-            sender_email=sender_email,
-            message=message,
-            download_url=download_url,
-            file_count=file_count,
-            total_mb=f"{total_bytes / (1024 * 1024):.1f}",
-            expires_at=expires_at.strftime("%Y-%m-%d %H:%M UTC"),
-        )
+        ctx = {
+            "sender_email": sender_email,
+            "message": message,
+            "download_url": download_url,
+            "file_count": file_count,
+            "total_mb": f"{total_bytes / (1024 * 1024):.1f}",
+            "expires_at": expires_at.strftime("%Y-%m-%d %H:%M UTC"),
+        }
         html = self._render_html(f"recipient.{locale.value}.html", ctx)
         return RenderedEmail(
             subject=_SUBJECTS[locale]["recipient"],
@@ -95,12 +96,12 @@ class EmailRenderer:
         file_count: int,
         expires_at: datetime,
     ) -> RenderedEmail:
-        ctx = dict(
-            download_url=download_url,
-            recipients=recipients,
-            file_count=file_count,
-            expires_at=expires_at.strftime("%Y-%m-%d %H:%M UTC"),
-        )
+        ctx = {
+            "download_url": download_url,
+            "recipients": recipients,
+            "file_count": file_count,
+            "expires_at": expires_at.strftime("%Y-%m-%d %H:%M UTC"),
+        }
         html = self._render_html(f"sender_confirm.{locale.value}.html", ctx)
         return RenderedEmail(
             subject=_SUBJECTS[locale]["sender_confirm"],
@@ -117,12 +118,12 @@ class EmailRenderer:
         file_count: int,
         at: datetime,
     ) -> RenderedEmail:
-        ctx = dict(
-            download_ip=download_ip,
-            download_country=download_country or "—",
-            file_count=file_count,
-            at=at.strftime("%Y-%m-%d %H:%M UTC"),
-        )
+        ctx = {
+            "download_ip": download_ip,
+            "download_country": download_country or "—",
+            "file_count": file_count,
+            "at": at.strftime("%Y-%m-%d %H:%M UTC"),
+        }
         html = self._render_html(f"sender_download_notice.{locale.value}.html", ctx)
         return RenderedEmail(
             subject=_SUBJECTS[locale]["sender_download_notice"],
@@ -141,11 +142,10 @@ def _strip_html(html: str) -> str:
     return text.strip()
 
 
-import aiosmtplib  # noqa: E402
+import ssl  # noqa: E402
 from email.message import EmailMessage  # noqa: E402
 
-
-import ssl  # noqa: E402
+import aiosmtplib  # noqa: E402
 
 
 class SmtpSender:
@@ -195,15 +195,15 @@ class SmtpSender:
 
         use_tls = self.port == 465
         start_tls = self.port == 587
-        kwargs: dict = dict(
-            hostname=self.host,
-            port=self.port,
-            username=self.user or None,
-            password=self.password or None,
-            use_tls=use_tls,
-            start_tls=start_tls,
-            timeout=30,
-        )
+        kwargs: dict[str, Any] = {
+            "hostname": self.host,
+            "port": self.port,
+            "username": self.user or None,
+            "password": self.password or None,
+            "use_tls": use_tls,
+            "start_tls": start_tls,
+            "timeout": 30,
+        }
         ctx = self._tls_context()
         if ctx is not None and (use_tls or start_tls):
             kwargs["tls_context"] = ctx

@@ -15,11 +15,13 @@ Implementation: overrides the raw ASGI `__call__` so the non-limited
 fast path is pure pass-through (no response-body buffering) — critical
 for the large streamed download responses flowing through this stack.
 """
+
 from __future__ import annotations
 
 import logging
 import re
 import time
+from typing import Any
 
 from hawkapi._types import ASGIApp, Receive, Scope, Send
 from hawkapi.middleware import Middleware
@@ -50,7 +52,7 @@ class RateLimitMiddleware(Middleware):
         app: ASGIApp,
         *,
         limiter: RateLimiter,
-        session_factory,
+        session_factory: Any,
         settings_service: SettingsService,
         cache_ttl_seconds: int = 10,
     ) -> None:

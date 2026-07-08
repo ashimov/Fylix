@@ -11,6 +11,7 @@ read-only — crash loudly if unset (`get_master_key` raises
 RuntimeError) so a pre-lifespan request never silently decrypts with
 `None`.
 """
+
 from __future__ import annotations
 
 _MASTER_KEY: bytes | None = None

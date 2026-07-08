@@ -15,7 +15,8 @@ reading the entire file into memory at once.
 from __future__ import annotations
 
 import hashlib
-from typing import IO, Iterator
+from collections.abc import Iterator
+from typing import IO
 
 from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
@@ -118,9 +119,7 @@ def decrypt_stream(
     try:
         final = decryptor.finalize_with_tag(tag)
     except InvalidTag as e:
-        raise StreamCryptoError(
-            "GCM authentication failed (wrong key or tampered data)"
-        ) from e
+        raise StreamCryptoError("GCM authentication failed (wrong key or tampered data)") from e
 
     if final:
         dst.write(final)
@@ -163,8 +162,6 @@ def decrypt_stream_iter(
     try:
         final = decryptor.finalize_with_tag(tag)
     except InvalidTag as e:
-        raise StreamCryptoError(
-            "GCM authentication failed (wrong key or tampered data)"
-        ) from e
+        raise StreamCryptoError("GCM authentication failed (wrong key or tampered data)") from e
     if final:
         yield final

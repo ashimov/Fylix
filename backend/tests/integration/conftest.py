@@ -4,6 +4,7 @@ All async integration tests share a single event loop (session scope) so
 that the module-level SQLAlchemy async engine can reuse its connection
 pool across tests without "Future attached to a different loop" errors.
 """
+
 import asyncio
 import os
 from collections.abc import Awaitable, Callable
@@ -83,14 +84,15 @@ async def _flush_rl_keys_global() -> None:
     """
     from redis.asyncio import Redis
 
-    from app.config import settings
-    from app.db import SessionLocal
-
     # Null out the FK that settings rows hold against admins — this prevents
     # test_admin_login._reset (DELETE FROM admins) from hitting a FK violation
     # when admin-settings tests left settings.updated_by pointing at a now-
     # deleted admin from a previous test.
     from sqlalchemy import text as _text
+
+    from app.config import settings
+    from app.db import SessionLocal
+
     async with SessionLocal() as s:
         await s.execute(_text("UPDATE settings SET updated_by = NULL WHERE updated_by IS NOT NULL"))
         await s.commit()

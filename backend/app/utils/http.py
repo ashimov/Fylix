@@ -3,16 +3,18 @@
 Keeping these out of `app/routers/public.py` so they're unit-testable without
 standing up HawkAPI / DB / crypto plumbing.
 """
+
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from collections.abc import Mapping
+from typing import TYPE_CHECKING, Any
 from urllib.parse import quote
 
 if TYPE_CHECKING:
     from hawkapi import Request
 
 
-def client_ip_from_scope(scope: dict) -> str:
+def client_ip_from_scope(scope: Mapping[str, Any]) -> str:
     """Scope-based variant of `client_ip` for ASGI middleware.
 
     Same trust model as `client_ip`: trust Nginx-set X-Forwarded-For
@@ -20,11 +22,12 @@ def client_ip_from_scope(scope: dict) -> str:
     """
     for k, v in scope.get("headers", []):
         if k.lower() == b"x-forwarded-for":
-            return v.decode("latin-1").split(",")[0].strip()
+            return str(v.decode("latin-1").split(",")[0].strip())
     client = scope.get("client")
     if client:
-        return client[0]
-    return "0.0.0.0"
+        return str(client[0])
+    # Fallback placeholder for log/rate-limit keys, not a bind address.
+    return "0.0.0.0"  # noqa: S104  # nosec B104
 
 
 def client_ip(request: Request) -> str:
@@ -43,11 +46,12 @@ def client_ip(request: Request) -> str:
         return xff.split(",")[0].strip()
     client = request.client
     if not client:
-        return "0.0.0.0"
+        # Fallback placeholder for log/rate-limit keys, not a bind address.
+        return "0.0.0.0"  # noqa: S104  # nosec B104
     # HawkAPI exposes `client` as a `tuple[str, int]`; the test doubles in
     # `tests/unit/test_http_utils.py` pass `SimpleNamespace(host=...)` for
     # legacy duck-typing. Support both without pulling in a type dependency.
-    return client[0] if isinstance(client, tuple) else client.host
+    return client[0] if isinstance(client, tuple) else client.host  # type: ignore[attr-defined]
 
 
 def content_disposition_attachment(filename: str, *, ascii_fallback: str | None = None) -> str:

@@ -1,8 +1,8 @@
 """Admin blocklist CRUD endpoints."""
+
 from __future__ import annotations
 
 import os
-from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 import httpx
@@ -33,23 +33,30 @@ async def _seed_admin(role: str = "admin") -> tuple[str, str]:
     secret = auth.generate_totp_secret()
     email = f"{role}_{uuid4().hex[:6]}@test.co"
     async with SessionLocal() as s:
-        s.add(Admin(
-            email=email,
-            password_hash=auth.hash_password("StrongPw123!"),
-            totp_secret=secret.encode("utf-8"),
-            totp_enrolled=True,
-            role=role,
-            disabled=False,
-        ))
+        s.add(
+            Admin(
+                email=email,
+                password_hash=auth.hash_password("StrongPw123!"),
+                totp_secret=secret.encode("utf-8"),
+                totp_enrolled=True,
+                role=role,
+                disabled=False,
+            )
+        )
         await s.commit()
     return email, secret
 
 
 async def _login(c: httpx.AsyncClient, email: str, secret: str) -> str:
     code = pyotp.TOTP(secret).now()
-    r = await c.post("/api/admin/login", json={
-        "email": email, "password": "StrongPw123!", "totp_code": code,
-    })
+    r = await c.post(
+        "/api/admin/login",
+        json={
+            "email": email,
+            "password": "StrongPw123!",
+            "totp_code": code,
+        },
+    )
     assert r.status_code == 200, r.text
     return c.cookies.get("csrf") or ""
 
@@ -71,9 +78,11 @@ async def test_blocklist_add_ip() -> None:
     email, secret = await _seed_admin()
     async with httpx.AsyncClient(base_url=BASE) as c:
         csrf = await _login(c, email, secret)
-        r = await c.post("/api/admin/blocklist/ips",
-                         json={"value": "192.0.2.1", "reason": "test"},
-                         headers={"X-CSRF-Token": csrf})
+        r = await c.post(
+            "/api/admin/blocklist/ips",
+            json={"value": "192.0.2.1", "reason": "test"},
+            headers={"X-CSRF-Token": csrf},
+        )
     assert r.status_code == 201
     body = r.json()
     # ipaddress.ip_network("192.0.2.1", strict=False) -> "192.0.2.1/32"
@@ -88,9 +97,9 @@ async def test_blocklist_add_invalid_ip_returns_400() -> None:
     email, secret = await _seed_admin()
     async with httpx.AsyncClient(base_url=BASE) as c:
         csrf = await _login(c, email, secret)
-        r = await c.post("/api/admin/blocklist/ips",
-                         json={"value": "not-an-ip"},
-                         headers={"X-CSRF-Token": csrf})
+        r = await c.post(
+            "/api/admin/blocklist/ips", json={"value": "not-an-ip"}, headers={"X-CSRF-Token": csrf}
+        )
     assert r.status_code == 400
 
 
@@ -100,9 +109,11 @@ async def test_blocklist_add_domain() -> None:
     email, secret = await _seed_admin()
     async with httpx.AsyncClient(base_url=BASE) as c:
         csrf = await _login(c, email, secret)
-        r = await c.post("/api/admin/blocklist/domains",
-                         json={"value": "spam.example.com"},
-                         headers={"X-CSRF-Token": csrf})
+        r = await c.post(
+            "/api/admin/blocklist/domains",
+            json={"value": "spam.example.com"},
+            headers={"X-CSRF-Token": csrf},
+        )
     assert r.status_code == 201
     assert r.json()["value"] == "spam.example.com"
 
@@ -113,9 +124,11 @@ async def test_blocklist_add_invalid_domain_returns_400() -> None:
     email, secret = await _seed_admin()
     async with httpx.AsyncClient(base_url=BASE) as c:
         csrf = await _login(c, email, secret)
-        r = await c.post("/api/admin/blocklist/domains",
-                         json={"value": "not_a_domain"},
-                         headers={"X-CSRF-Token": csrf})
+        r = await c.post(
+            "/api/admin/blocklist/domains",
+            json={"value": "not_a_domain"},
+            headers={"X-CSRF-Token": csrf},
+        )
     assert r.status_code == 400
 
 
@@ -125,9 +138,11 @@ async def test_blocklist_add_email() -> None:
     email, secret = await _seed_admin()
     async with httpx.AsyncClient(base_url=BASE) as c:
         csrf = await _login(c, email, secret)
-        r = await c.post("/api/admin/blocklist/emails",
-                         json={"value": "bad@actor.com"},
-                         headers={"X-CSRF-Token": csrf})
+        r = await c.post(
+            "/api/admin/blocklist/emails",
+            json={"value": "bad@actor.com"},
+            headers={"X-CSRF-Token": csrf},
+        )
     assert r.status_code == 201
     assert r.json()["value"] == "bad@actor.com"
 
@@ -138,9 +153,9 @@ async def test_blocklist_list_after_add() -> None:
     email, secret = await _seed_admin()
     async with httpx.AsyncClient(base_url=BASE) as c:
         csrf = await _login(c, email, secret)
-        await c.post("/api/admin/blocklist/ips",
-                     json={"value": "10.0.0.2"},
-                     headers={"X-CSRF-Token": csrf})
+        await c.post(
+            "/api/admin/blocklist/ips", json={"value": "10.0.0.2"}, headers={"X-CSRF-Token": csrf}
+        )
         r = await c.get("/api/admin/blocklist/ips")
     assert r.status_code == 200
     values = [e["value"] for e in r.json()]
@@ -154,11 +169,10 @@ async def test_blocklist_delete_ip() -> None:
     email, secret = await _seed_admin()
     async with httpx.AsyncClient(base_url=BASE) as c:
         csrf = await _login(c, email, secret)
-        await c.post("/api/admin/blocklist/ips",
-                     json={"value": "10.0.0.3"},
-                     headers={"X-CSRF-Token": csrf})
-        r = await c.delete("/api/admin/blocklist/ips/10.0.0.3",
-                           headers={"X-CSRF-Token": csrf})
+        await c.post(
+            "/api/admin/blocklist/ips", json={"value": "10.0.0.3"}, headers={"X-CSRF-Token": csrf}
+        )
+        r = await c.delete("/api/admin/blocklist/ips/10.0.0.3", headers={"X-CSRF-Token": csrf})
     assert r.status_code == 204
 
     async with httpx.AsyncClient(base_url=BASE) as c:
@@ -183,9 +197,9 @@ async def test_viewer_cannot_add_blocklist() -> None:
     email, secret = await _seed_admin(role="viewer")
     async with httpx.AsyncClient(base_url=BASE) as c:
         csrf = await _login(c, email, secret)
-        r = await c.post("/api/admin/blocklist/ips",
-                         json={"value": "1.2.3.4"},
-                         headers={"X-CSRF-Token": csrf})
+        r = await c.post(
+            "/api/admin/blocklist/ips", json={"value": "1.2.3.4"}, headers={"X-CSRF-Token": csrf}
+        )
     assert r.status_code == 403
 
 
@@ -197,19 +211,22 @@ async def test_blocklist_blocks_transfer_creation() -> None:
     async with httpx.AsyncClient(base_url=BASE) as c:
         csrf = await _login(c, email, secret)
         # Block 127.0.0.1 (the test client IP)
-        r = await c.post("/api/admin/blocklist/ips",
-                         json={"value": "127.0.0.1"},
-                         headers={"X-CSRF-Token": csrf})
+        r = await c.post(
+            "/api/admin/blocklist/ips", json={"value": "127.0.0.1"}, headers={"X-CSRF-Token": csrf}
+        )
         assert r.status_code == 201
 
     # Now try to create a transfer from localhost — should be blocked
     async with httpx.AsyncClient(base_url=BASE) as c:
-        r = await c.post("/api/transfers", json={
-            "sender_email": "sender@example.com",
-            "recipient_emails": ["r@example.com"],
-            "files": [{"filename": "a.txt", "size": 100}],
-            "ttl_days": 7,
-        })
+        r = await c.post(
+            "/api/transfers",
+            json={
+                "sender_email": "sender@example.com",
+                "recipient_emails": ["r@example.com"],
+                "files": [{"filename": "a.txt", "size": 100}],
+                "ttl_days": 7,
+            },
+        )
     assert r.status_code == 403
 
 

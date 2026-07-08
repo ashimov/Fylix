@@ -2,6 +2,7 @@
 
 When secret is empty, `required` is False and `verify` always returns True.
 """
+
 from __future__ import annotations
 
 import logging
@@ -36,9 +37,10 @@ class CaptchaVerifier:
         if remote_ip:
             data["remoteip"] = remote_ip
         try:
-            async with aiohttp.ClientSession(
-                timeout=aiohttp.ClientTimeout(total=10)
-            ) as s, s.post(self.verify_url, data=data) as resp:
+            async with (
+                aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as s,
+                s.post(self.verify_url, data=data) as resp,
+            ):
                 if resp.status >= 400:
                     log.warning("hcaptcha: HTTP %d", resp.status)
                     return False

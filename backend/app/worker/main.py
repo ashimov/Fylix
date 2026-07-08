@@ -1,4 +1,5 @@
 """Worker entrypoint: loop over Redis queues, dispatch encrypt + email tasks."""
+
 from __future__ import annotations
 
 import asyncio
@@ -53,7 +54,9 @@ async def run_loop() -> None:  # noqa: PLR0915 — composition root, complexity 
 
     redis = Redis.from_url(settings.redis_url, decode_responses=False)
     staging = StagingService(root=settings.staging_dir)
-    telegram = TelegramClient(bot_token=settings.telegram_bot_token, chat_id=settings.telegram_chat_id)
+    telegram = TelegramClient(
+        bot_token=settings.telegram_bot_token, chat_id=settings.telegram_chat_id
+    )
     alerts = AlertDispatcher(telegram)
     storage = StorageService(
         endpoint=settings.minio_endpoint,
@@ -80,6 +83,7 @@ async def run_loop() -> None:  # noqa: PLR0915 — composition root, complexity 
 
     async def _cleanup_tick() -> None:
         import time as _time
+
         async with SessionLocal() as session:
             try:
                 await run_cleanup_once(session=session, staging=staging, storage=storage)
@@ -104,6 +108,7 @@ async def run_loop() -> None:  # noqa: PLR0915 — composition root, complexity 
     )
 
     if settings.defender_poll_enabled:
+
         async def _defender_tick() -> None:
             async with SessionLocal() as session:
                 try:

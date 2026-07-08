@@ -57,14 +57,10 @@ async def lifespan(_: HawkAPI) -> AsyncIterator[None]:
     setup_otel(service_name="fylix-api")
 
     enforce_perms = settings.app_env != "development"
-    set_master_key(
-        load_master_key(settings.master_key_path, enforce_perms=enforce_perms)
-    )
+    set_master_key(load_master_key(settings.master_key_path, enforce_perms=enforce_perms))
     if settings.master_key_previous_path is not None:
         set_previous_master_key(
-            load_master_key(
-                settings.master_key_previous_path, enforce_perms=enforce_perms
-            )
+            load_master_key(settings.master_key_previous_path, enforce_perms=enforce_perms)
         )
     try:
         yield

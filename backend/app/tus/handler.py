@@ -4,6 +4,7 @@ The transfer and its TransferFile rows are created up-front via POST /api/transf
 This module only handles the chunked upload into the staging dir; final
 assembly/encryption is done by the worker.
 """
+
 from __future__ import annotations
 
 import json
@@ -18,7 +19,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Transfer, TransferFile
 from app.services.staging import StagingService
-
 
 TUS_VERSION = "1.0.0"
 UPLOAD_READY_QUEUE = "upload:ready"
@@ -65,9 +65,7 @@ class TusHandler:
         upload_offset: int,
         body_stream: IO[bytes],
     ) -> UploadState:
-        transfer, tf = await self._load_transfer_and_file(
-            session, transfer_id, file_id
-        )
+        transfer, tf = await self._load_transfer_and_file(session, transfer_id, file_id)
 
         if transfer.status != "uploading":
             raise TusError(409, f"transfer status is {transfer.status}")
@@ -76,9 +74,7 @@ class TusHandler:
         current = path.stat().st_size if path.exists() else 0
 
         if upload_offset != current:
-            raise TusError(
-                409, f"Upload-Offset mismatch (expected {current}, got {upload_offset})"
-            )
+            raise TusError(409, f"Upload-Offset mismatch (expected {current}, got {upload_offset})")
 
         path.parent.mkdir(parents=True, exist_ok=True)
         written = _append_stream(path, body_stream, max_total=tf.size_bytes)
@@ -88,9 +84,7 @@ class TusHandler:
             # Truncate back to declared size and reject the excess.
             with open(path, "r+b") as f:
                 f.truncate(tf.size_bytes)
-            raise TusError(
-                413, f"chunk exceeds declared Upload-Length ({tf.size_bytes})"
-            )
+            raise TusError(413, f"chunk exceeds declared Upload-Length ({tf.size_bytes})")
 
         state = UploadState(
             current_offset=new_offset,
@@ -124,14 +118,16 @@ class TusHandler:
         tf = await self._load_file(session, transfer_id, file_id)
         return t, tf
 
-    async def _all_files_complete(
-        self, session: AsyncSession, transfer_id: UUID
-    ) -> bool:
+    async def _all_files_complete(self, session: AsyncSession, transfer_id: UUID) -> bool:
         rows = (
-            await session.execute(
-                select(TransferFile).where(TransferFile.transfer_id == transfer_id)
+            (
+                await session.execute(
+                    select(TransferFile).where(TransferFile.transfer_id == transfer_id)
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         for row in rows:
             p = self.staging.file_path(transfer_id, row.id, row.safe_filename)
             size = p.stat().st_size if p.exists() else 0

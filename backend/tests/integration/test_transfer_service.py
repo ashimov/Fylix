@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 import pytest
@@ -15,10 +15,12 @@ from app.services.transfer import TransferService
 async def _clean_db() -> None:
     """Truncate transfer-related tables before each test to keep them isolated."""
     async with SessionLocal() as session:
-        await session.execute(text(
-            "TRUNCATE TABLE transfers, transfer_recipients, transfer_files, downloads "
-            "RESTART IDENTITY CASCADE"
-        ))
+        await session.execute(
+            text(
+                "TRUNCATE TABLE transfers, transfer_recipients, transfer_files, downloads "
+                "RESTART IDENTITY CASCADE"
+            )
+        )
         await session.commit()
 
 
@@ -50,7 +52,7 @@ async def test_create_transfer_persists_rows(tmp_path) -> None:
     assert isinstance(resp.transfer_id, UUID)
     assert len(resp.download_token) >= 32
     assert len(resp.manage_token) >= 32
-    assert resp.expires_at > datetime.now(timezone.utc) + timedelta(days=2)
+    assert resp.expires_at > datetime.now(UTC) + timedelta(days=2)
 
     async with SessionLocal() as session:
         t = await session.get(Transfer, resp.transfer_id)
@@ -59,13 +61,21 @@ async def test_create_transfer_persists_rows(tmp_path) -> None:
         assert t.file_count == 2
         assert t.total_size == 1280
         assert t.sender_country == "KZ"
-        recs = (await session.execute(
-            select(TransferRecipient).where(TransferRecipient.transfer_id == t.id)
-        )).scalars().all()
+        recs = (
+            (
+                await session.execute(
+                    select(TransferRecipient).where(TransferRecipient.transfer_id == t.id)
+                )
+            )
+            .scalars()
+            .all()
+        )
         assert {r.email for r in recs} == {"bob@example.com", "carol@example.com"}
-        files = (await session.execute(
-            select(TransferFile).where(TransferFile.transfer_id == t.id)
-        )).scalars().all()
+        files = (
+            (await session.execute(select(TransferFile).where(TransferFile.transfer_id == t.id)))
+            .scalars()
+            .all()
+        )
         assert {f.filename for f in files} == {"report.pdf", "notes.txt"}
 
     # Staging dir is NOT created up-front — the tus handler creates it lazily

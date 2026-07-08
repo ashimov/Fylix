@@ -1,4 +1,5 @@
 """Request-ID correlation: middleware + contextvar + worker propagation."""
+
 from __future__ import annotations
 
 from hawkapi import HawkAPI
@@ -70,5 +71,6 @@ def test_set_request_id_manually() -> None:
     finally:
         # Restore previous state (None in this test context).
         from app.context import _request_id
+
         _request_id.reset(token)
     assert current_request_id() is None

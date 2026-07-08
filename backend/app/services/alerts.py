@@ -1,8 +1,9 @@
 """Alert dispatcher — routes (event, severity, details) to Telegram + audit_log."""
+
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
@@ -60,7 +61,7 @@ class AlertDispatcher:
         details: dict[str, Any] | None,
     ) -> str:
         icon = "\U0001f6a8" if severity == "critical" else "\u26a0\ufe0f"
-        ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+        ts = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
         lines = [
             f"{icon} *{event_type}* — `{severity}`",
             f"_{ts}_",

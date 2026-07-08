@@ -22,6 +22,7 @@ assumption ever breaks for a deployment, switch to
 `op.create_index(..., postgresql_concurrently=True)` and run outside
 a transaction (requires removing transactional_ddl for this migration).
 """
+
 from collections.abc import Sequence
 
 from alembic import op

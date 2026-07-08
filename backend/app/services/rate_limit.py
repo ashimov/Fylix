@@ -3,12 +3,12 @@
 Returns (allowed: bool, remaining: int). Emits `window_reset_seconds` via a
 second return value so middleware can send Retry-After.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
 
 from redis.asyncio import Redis
-
 
 _LUA = """
 local c = redis.call('INCR', KEYS[1])

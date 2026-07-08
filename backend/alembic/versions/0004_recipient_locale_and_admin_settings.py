@@ -5,6 +5,7 @@ Revises: 0003
 Create Date: 2026-04-14
 
 """
+
 import json
 from collections.abc import Sequence
 
@@ -46,7 +47,5 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     for key in ADMIN_SETTINGS:
-        op.execute(
-            sa.text("DELETE FROM settings WHERE key = :k").bindparams(k=key)
-        )
+        op.execute(sa.text("DELETE FROM settings WHERE key = :k").bindparams(k=key))
     op.drop_column("transfer_recipients", "locale")

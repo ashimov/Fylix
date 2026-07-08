@@ -1,8 +1,9 @@
 """Admin transfer list/detail/delete/revoke endpoints."""
+
 from __future__ import annotations
 
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 import httpx
@@ -34,23 +35,30 @@ async def _seed_admin(role: str = "admin") -> tuple[str, str, str]:
     secret = auth.generate_totp_secret()
     email = f"{role}@test.co"
     async with SessionLocal() as s:
-        s.add(Admin(
-            email=email,
-            password_hash=auth.hash_password("StrongPw123!"),
-            totp_secret=secret.encode("utf-8"),
-            totp_enrolled=True,
-            role=role,
-            disabled=False,
-        ))
+        s.add(
+            Admin(
+                email=email,
+                password_hash=auth.hash_password("StrongPw123!"),
+                totp_secret=secret.encode("utf-8"),
+                totp_enrolled=True,
+                role=role,
+                disabled=False,
+            )
+        )
         await s.commit()
     return email, secret, "StrongPw123!"
 
 
 async def _login(c: httpx.AsyncClient, email: str, secret: str) -> str:
     code = pyotp.TOTP(secret).now()
-    r = await c.post("/api/admin/login", json={
-        "email": email, "password": "StrongPw123!", "totp_code": code,
-    })
+    r = await c.post(
+        "/api/admin/login",
+        json={
+            "email": email,
+            "password": "StrongPw123!",
+            "totp_code": code,
+        },
+    )
     assert r.status_code == 200, r.text
     return c.cookies.get("csrf") or ""
 
@@ -66,26 +74,30 @@ async def _seed_transfer(status: str = "ready") -> UUID:
             status=status,
             total_size=1024,
             file_count=1,
-            expires_at=datetime.now(timezone.utc) + timedelta(days=7),
+            expires_at=datetime.now(UTC) + timedelta(days=7),
             wrapped_key=b"fakewrappedkey",
         )
         s.add(t)
         await s.flush()
         tid = t.id
-        s.add(TransferFile(
-            transfer_id=tid,
-            filename="test.txt",
-            safe_filename="test.txt",
-            mime_type="text/plain",
-            size_bytes=1024,
-            object_key=f"{tid}/file1.enc",
-            iv=b"\x00" * 12,
-            sha256_cipher=b"\x00" * 32,
-        ))
-        s.add(TransferRecipient(
-            transfer_id=tid,
-            email="recipient@example.com",
-        ))
+        s.add(
+            TransferFile(
+                transfer_id=tid,
+                filename="test.txt",
+                safe_filename="test.txt",
+                mime_type="text/plain",
+                size_bytes=1024,
+                object_key=f"{tid}/file1.enc",
+                iv=b"\x00" * 12,
+                sha256_cipher=b"\x00" * 32,
+            )
+        )
+        s.add(
+            TransferRecipient(
+                transfer_id=tid,
+                email="recipient@example.com",
+            )
+        )
         await s.commit()
     return tid
 
@@ -174,9 +186,11 @@ async def test_admin_delete_transfer() -> None:
         assert t.status == "deleted"
         assert t.wrapped_key is None
         # Check admin_action was recorded
-        actions = (await s.execute(
-            select(AdminAction).where(AdminAction.action == "delete_transfer")
-        )).scalars().all()
+        actions = (
+            (await s.execute(select(AdminAction).where(AdminAction.action == "delete_transfer")))
+            .scalars()
+            .all()
+        )
         assert len(actions) == 1
 
 
@@ -195,9 +209,11 @@ async def test_admin_revoke_transfer() -> None:
         assert t.status == "revoked"
         # wrapped_key kept on revoke
         assert t.wrapped_key is not None
-        actions = (await s.execute(
-            select(AdminAction).where(AdminAction.action == "revoke_transfer")
-        )).scalars().all()
+        actions = (
+            (await s.execute(select(AdminAction).where(AdminAction.action == "revoke_transfer")))
+            .scalars()
+            .all()
+        )
         assert len(actions) == 1
 
 

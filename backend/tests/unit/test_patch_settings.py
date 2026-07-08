@@ -1,5 +1,6 @@
 """PatchSettingsRequest — typed partial-update DTO with range validation
 and extra="forbid" for unknown keys."""
+
 from __future__ import annotations
 
 import pytest
@@ -72,9 +73,7 @@ def test_wrong_type_for_bool_field_rejects_list() -> None:
 
 
 def test_extension_blacklist_accepts_list_of_strings() -> None:
-    p = PatchSettingsRequest.model_validate(
-        {"extension_blacklist": ["exe", "bat", "scr"]}
-    )
+    p = PatchSettingsRequest.model_validate({"extension_blacklist": ["exe", "bat", "scr"]})
     assert p.to_changes() == {"extension_blacklist": ["exe", "bat", "scr"]}
 
 

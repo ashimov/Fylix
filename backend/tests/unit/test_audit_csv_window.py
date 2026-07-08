@@ -3,6 +3,7 @@
 Prevents accidental "dump the whole table" (OOM + sequential scan) by
 requiring both since/until and capping the span at 90 days.
 """
+
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta

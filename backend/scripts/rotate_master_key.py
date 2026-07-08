@@ -20,6 +20,7 @@ leaves an inconsistent state that's recoverable by a full restore.
 Usage (inside api container):
     /opt/venv/bin/python scripts/rotate_master_key.py --new-key /tmp/new_master_key
 """
+
 from __future__ import annotations
 
 import argparse
@@ -53,7 +54,12 @@ async def _rotate_transfers(old: bytes, new: bytes) -> int:
     async with SessionLocal() as session:
         last_id = None
         while True:
-            stmt = select(Transfer).where(Transfer.wrapped_key.is_not(None)).order_by(Transfer.id).limit(CHUNK)
+            stmt = (
+                select(Transfer)
+                .where(Transfer.wrapped_key.is_not(None))
+                .order_by(Transfer.id)
+                .limit(CHUNK)
+            )
             if last_id is not None:
                 stmt = stmt.where(Transfer.id > last_id)
             rows = (await session.execute(stmt)).scalars().all()
@@ -76,9 +82,11 @@ async def _rotate_transfers(old: bytes, new: bytes) -> int:
 async def _rotate_admins(old: bytes, new: bytes) -> int:
     rewrapped = 0
     async with SessionLocal() as session:
-        rows = (await session.execute(
-            select(Admin).where(Admin.totp_secret.is_not(None))
-        )).scalars().all()
+        rows = (
+            (await session.execute(select(Admin).where(Admin.totp_secret.is_not(None))))
+            .scalars()
+            .all()
+        )
         for a in rows:
             secret = a.totp_secret
             if secret is None or not is_wrapped_totp(secret):

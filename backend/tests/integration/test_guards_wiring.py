@@ -1,22 +1,19 @@
 """Integration tests that each of the 3 guard surfaces works end-to-end
 against the running stack."""
+
 import os
-from datetime import datetime, timedelta, timezone
 
 import httpx
 import pytest
 from sqlalchemy import select, text
 
-from app.config import settings as app_settings
 from app.db import SessionLocal
 from app.models import (
     AuditLog,
     BlocklistEmail,
     BlocklistEmailDomain,
     BlocklistIP,
-    Setting,
 )
-
 
 BASE = os.environ.get("PUBLIC_URL", "http://localhost:8000")
 
@@ -24,11 +21,13 @@ BASE = os.environ.get("PUBLIC_URL", "http://localhost:8000")
 @pytest.fixture(autouse=True)
 async def _reset() -> None:
     async with SessionLocal() as session:
-        await session.execute(text(
-            "TRUNCATE TABLE transfers, transfer_recipients, transfer_files, "
-            "downloads, audit_log, blocklist_ips, blocklist_emails, "
-            "blocklist_email_domains RESTART IDENTITY CASCADE"
-        ))
+        await session.execute(
+            text(
+                "TRUNCATE TABLE transfers, transfer_recipients, transfer_files, "
+                "downloads, audit_log, blocklist_ips, blocklist_emails, "
+                "blocklist_email_domains RESTART IDENTITY CASCADE"
+            )
+        )
         await session.commit()
 
 
@@ -57,9 +56,11 @@ async def test_blocked_ip_returns_403_and_audits() -> None:
     assert r.json() == {"detail": {"error": "blocked"}}
 
     async with SessionLocal() as session:
-        audits = (await session.execute(
-            select(AuditLog).where(AuditLog.event_type == "blocklist_hit")
-        )).scalars().all()
+        audits = (
+            (await session.execute(select(AuditLog).where(AuditLog.event_type == "blocklist_hit")))
+            .scalars()
+            .all()
+        )
         assert len(audits) == 1
         assert audits[0].severity == "warn"
 
@@ -93,9 +94,12 @@ async def test_blocked_email_domain_returns_403() -> None:
 async def test_extension_blacklist_returns_422() -> None:
     # seed already puts .exe in extension_blacklist
     async with httpx.AsyncClient(base_url=BASE, verify=False) as c:
-        r = await c.post("/api/transfers", json=_payload(
-            files=[{"filename": "virus.EXE", "size": 1024}],
-        ))
+        r = await c.post(
+            "/api/transfers",
+            json=_payload(
+                files=[{"filename": "virus.EXE", "size": 1024}],
+            ),
+        )
     assert r.status_code == 422
     body = r.json()
     assert body["detail"]["error"] == "policy_violation"
@@ -107,9 +111,12 @@ async def test_extension_blacklist_returns_422() -> None:
 async def test_oversized_transfer_returns_413() -> None:
     gb = 1024 * 1024 * 1024
     async with httpx.AsyncClient(base_url=BASE, verify=False) as c:
-        r = await c.post("/api/transfers", json=_payload(
-            files=[{"filename": "huge.bin", "size": 3 * gb}],
-        ))
+        r = await c.post(
+            "/api/transfers",
+            json=_payload(
+                files=[{"filename": "huge.bin", "size": 3 * gb}],
+            ),
+        )
     assert r.status_code == 413
 
 
@@ -117,9 +124,12 @@ async def test_oversized_transfer_returns_413() -> None:
 @pytest.mark.asyncio
 async def test_too_many_recipients_returns_422() -> None:
     async with httpx.AsyncClient(base_url=BASE, verify=False) as c:
-        r = await c.post("/api/transfers", json=_payload(
-            recipient_emails=[f"u{i}@x.co" for i in range(21)],
-        ))
+        r = await c.post(
+            "/api/transfers",
+            json=_payload(
+                recipient_emails=[f"u{i}@x.co" for i in range(21)],
+            ),
+        )
     # Pydantic rejects >20 at the schema layer BEFORE the policy check (recipients field has max_length=20).
     # So we get 422 from Pydantic validation, not from policy.
     assert r.status_code == 422

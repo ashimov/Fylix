@@ -1,6 +1,6 @@
 """Integration tests for BlocklistChecker against real PostgreSQL."""
-from datetime import datetime, timedelta, timezone
-from uuid import uuid4
+
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy import text
@@ -13,9 +13,11 @@ from app.services.blocklist import BlocklistChecker
 @pytest.fixture(autouse=True)
 async def _clean() -> None:
     async with SessionLocal() as session:
-        await session.execute(text(
-            "TRUNCATE TABLE blocklist_ips, blocklist_email_domains, blocklist_emails RESTART IDENTITY CASCADE"
-        ))
+        await session.execute(
+            text(
+                "TRUNCATE TABLE blocklist_ips, blocklist_email_domains, blocklist_emails RESTART IDENTITY CASCADE"
+            )
+        )
         await session.commit()
 
 
@@ -49,7 +51,7 @@ async def test_check_ip_matches_cidr_block() -> None:
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_check_ip_respects_expiry() -> None:
-    past = datetime.now(timezone.utc) - timedelta(days=1)
+    past = datetime.now(UTC) - timedelta(days=1)
     async with SessionLocal() as session:
         session.add(BlocklistIP(cidr="5.5.5.5/32", reason="old", expires_at=past))
         await session.commit()

@@ -6,17 +6,18 @@ from sqlalchemy import text
 
 from app.db import SessionLocal
 
-
 PUBLIC_URL = os.environ.get("PUBLIC_URL", "http://localhost:8000")
 
 
 @pytest.fixture(autouse=True)
 async def _clean_db() -> None:
     async with SessionLocal() as session:
-        await session.execute(text(
-            "TRUNCATE TABLE transfers, transfer_recipients, transfer_files, downloads "
-            "RESTART IDENTITY CASCADE"
-        ))
+        await session.execute(
+            text(
+                "TRUNCATE TABLE transfers, transfer_recipients, transfer_files, downloads "
+                "RESTART IDENTITY CASCADE"
+            )
+        )
         await session.commit()
 
 
@@ -40,9 +41,10 @@ async def test_post_create_transfer_returns_tokens_and_upload_urls() -> None:
     assert len(body["download_token"]) >= 32
     assert len(body["manage_token"]) >= 32
     assert "doc.pdf" in body["upload_urls"]
-    assert body["upload_urls"]["doc.pdf"].endswith(
-        f"/api/transfers/{body['transfer_id']}/files/"
-    ) is False  # has file_id suffix
+    assert (
+        body["upload_urls"]["doc.pdf"].endswith(f"/api/transfers/{body['transfer_id']}/files/")
+        is False
+    )  # has file_id suffix
     assert "expires_at" in body
 
 

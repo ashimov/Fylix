@@ -9,12 +9,14 @@ transfer twice. Double-encryption with a fresh IV would silently overwrite
 MinIO ciphertext while any existing downloader is mid-stream; the lock
 closes that window.
 """
+
 from __future__ import annotations
 
 import json as _json
 import logging
 import secrets
-from datetime import datetime, timezone
+from collections.abc import Sequence
+from datetime import UTC, datetime
 from tempfile import SpooledTemporaryFile
 from uuid import UUID
 
@@ -87,10 +89,14 @@ async def process_encrypt_job(
             return
 
         files = (
-            await session.execute(
-                select(TransferFile).where(TransferFile.transfer_id == transfer_id)
+            (
+                await session.execute(
+                    select(TransferFile).where(TransferFile.transfer_id == transfer_id)
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
 
         try:
             # One file_key shared across all files in this transfer.
@@ -100,7 +106,8 @@ async def process_encrypt_job(
                 plaintext_path = staging.file_path(transfer_id, tf.id, tf.safe_filename)
                 if not plaintext_path.exists():
                     raise EncryptError(
-                        f"staging file missing for transfer={transfer_id} file={tf.id}: {plaintext_path}"
+                        f"staging file missing for transfer={transfer_id} "
+                        f"file={tf.id}: {plaintext_path}"
                     )
                 actual_size = plaintext_path.stat().st_size
                 if actual_size != tf.size_bytes:
@@ -144,7 +151,7 @@ async def process_encrypt_job(
                     details={
                         "file_count": len(files),
                         "total_size": sum(f.size_bytes for f in files),
-                        "completed_at": datetime.now(timezone.utc).isoformat(),
+                        "completed_at": datetime.now(UTC).isoformat(),
                     },
                 )
             )
@@ -173,7 +180,7 @@ async def process_encrypt_job(
             transfer = await session.get(Transfer, transfer_id)
             if transfer is not None:
                 transfer.status = "infected"
-                transfer.infected_at = datetime.now(timezone.utc)
+                transfer.infected_at = datetime.now(UTC)
                 session.add(
                     AuditLog(
                         event_type="upload_failed",
@@ -211,16 +218,22 @@ async def _enqueue_transfer_emails(
     renderer: EmailRenderer,
     transfer: Transfer,
     transfer_id: UUID,
-    files: list[TransferFile],
+    files: Sequence[TransferFile],
 ) -> None:
     """Build and push email jobs for all recipients + sender confirm."""
     try:
         base = settings.public_url.rstrip("/")
         download_url = f"{base}/t/{transfer.token}"
 
-        recipients = (await session.execute(
-            select(TransferRecipient).where(TransferRecipient.transfer_id == transfer_id)
-        )).scalars().all()
+        recipients = (
+            (
+                await session.execute(
+                    select(TransferRecipient).where(TransferRecipient.transfer_id == transfer_id)
+                )
+            )
+            .scalars()
+            .all()
+        )
 
         locale = Locale.RU  # default; per-recipient locale deferred to Phase 5
 
@@ -236,13 +249,15 @@ async def _enqueue_transfer_emails(
                 total_bytes=transfer.total_size,
                 expires_at=transfer.expires_at,
             )
-            jobs.append({
-                "to": r.email,
-                "subject": mail.subject,
-                "html": mail.html,
-                "text": mail.text,
-                "recipient_id": str(r.id),
-            })
+            jobs.append(
+                {
+                    "to": r.email,
+                    "subject": mail.subject,
+                    "html": mail.html,
+                    "text": mail.text,
+                    "recipient_id": str(r.id),
+                }
+            )
 
         confirm = renderer.render_sender_confirm(
             locale,
@@ -251,12 +266,14 @@ async def _enqueue_transfer_emails(
             file_count=len(files),
             expires_at=transfer.expires_at,
         )
-        jobs.append({
-            "to": transfer.sender_email,
-            "subject": confirm.subject,
-            "html": confirm.html,
-            "text": confirm.text,
-        })
+        jobs.append(
+            {
+                "to": transfer.sender_email,
+                "subject": confirm.subject,
+                "html": confirm.html,
+                "text": confirm.text,
+            }
+        )
 
         pipe = redis.pipeline()
         for job in jobs:

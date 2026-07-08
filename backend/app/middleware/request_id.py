@@ -19,6 +19,7 @@ Implementation note: we override the raw ASGI `__call__` rather than use
 pipeline buffers the entire response body before running the after-hook
 — that would break streaming downloads passing through this middleware.
 """
+
 from __future__ import annotations
 
 import uuid
@@ -39,17 +40,14 @@ def _is_safe_id(raw: str) -> bool:
     """Reject anything that could break log-line integrity or poison headers."""
     if not raw or len(raw) > _MAX_ID_LEN:
         return False
-    for ch in raw:
-        if ch in ("\r", "\n") or ord(ch) < 0x20 or ord(ch) == 0x7F:
-            return False
-    return True
+    return all(not (ch in ("\r", "\n") or ord(ch) < 32 or ord(ch) == 127) for ch in raw)
 
 
 def _extract_header(scope: Scope, name_lc: bytes) -> str | None:
     for k, v in scope.get("headers", []):
         if k.lower() == name_lc:
             try:
-                return v.decode("latin-1")
+                return str(v.decode("latin-1"))
             except Exception:  # noqa: BLE001
                 return None
     return None
@@ -71,8 +69,7 @@ class RequestIdMiddleware(Middleware):
         async def send_with_header(message: dict[str, Any]) -> None:
             if message["type"] == "http.response.start":
                 headers = [
-                    (k, v) for k, v in message.get("headers", [])
-                    if k.lower() != _HEADER_NAME_LC
+                    (k, v) for k, v in message.get("headers", []) if k.lower() != _HEADER_NAME_LC
                 ]
                 headers.append((_HEADER_NAME_BYTES, rid_bytes))
                 message = {**message, "headers": headers}

@@ -1,7 +1,7 @@
+import asyncio
 import io
 import os
 import zipfile
-import asyncio
 from uuid import UUID
 
 import httpx
@@ -20,21 +20,25 @@ async def _clean_state() -> None:
     import shutil
 
     async with SessionLocal() as session:
-        await session.execute(text(
-            "TRUNCATE TABLE transfers, transfer_recipients, transfer_files, "
-            "downloads, audit_log RESTART IDENTITY CASCADE"
-        ))
+        await session.execute(
+            text(
+                "TRUNCATE TABLE transfers, transfer_recipients, transfer_files, "
+                "downloads, audit_log RESTART IDENTITY CASCADE"
+            )
+        )
         await session.commit()
 
     shutil.rmtree(app_settings.staging_dir, ignore_errors=True)
     app_settings.staging_dir.mkdir(parents=True, exist_ok=True)
 
     from redis.asyncio import Redis
+
     r = Redis.from_url(app_settings.redis_url)
     await r.delete("upload:ready")
     await r.aclose()
 
     from app.services.storage import StorageService
+
     storage = StorageService(
         endpoint=app_settings.minio_endpoint,
         access_key=app_settings.minio_root_user,
@@ -122,11 +126,15 @@ async def test_single_file_download_roundtrip() -> None:
         token, tid = await _upload(c, {"fox.txt": payload})
         # Get file_id from DB
         async with SessionLocal() as session:
-            from app.models import TransferFile
             from sqlalchemy import select
-            f = (await session.execute(
-                select(TransferFile).where(TransferFile.transfer_id == UUID(tid))
-            )).scalar_one()
+
+            from app.models import TransferFile
+
+            f = (
+                await session.execute(
+                    select(TransferFile).where(TransferFile.transfer_id == UUID(tid))
+                )
+            ).scalar_one()
             file_id = f.id
 
         r = await c.get(f"/t/{token}/file/{file_id}")
@@ -163,19 +171,25 @@ async def test_download_records_download_row() -> None:
     async with httpx.AsyncClient(base_url=BASE, verify=False) as c:
         token, tid = await _upload(c, {"file.bin": b"xyz"})
         async with SessionLocal() as session:
-            from app.models import TransferFile, Download
             from sqlalchemy import select
-            f = (await session.execute(
-                select(TransferFile).where(TransferFile.transfer_id == UUID(tid))
-            )).scalar_one()
+
+            from app.models import Download, TransferFile
+
+            f = (
+                await session.execute(
+                    select(TransferFile).where(TransferFile.transfer_id == UUID(tid))
+                )
+            ).scalar_one()
             file_id = f.id
 
         await c.get(f"/t/{token}/file/{file_id}")
 
     async with SessionLocal() as session:
-        rows = (await session.execute(
-            select(Download).where(Download.transfer_id == UUID(tid))
-        )).scalars().all()
+        rows = (
+            (await session.execute(select(Download).where(Download.transfer_id == UUID(tid))))
+            .scalars()
+            .all()
+        )
     assert len(rows) == 1
     assert rows[0].file_id == file_id
     assert rows[0].bytes_sent == 3

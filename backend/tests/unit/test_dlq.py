@@ -1,5 +1,6 @@
 """Worker dead-letter queue — failed jobs go to `<queue>:dlq` instead of
 crashing the consumer loop or silently vanishing."""
+
 from __future__ import annotations
 
 import json

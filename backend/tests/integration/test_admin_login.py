@@ -1,4 +1,5 @@
 """Admin login/logout/me via HTTP against running stack."""
+
 import os
 
 import httpx
@@ -31,14 +32,16 @@ async def _seed_admin(
     auth = AuthService(max_failed_attempts=5, lockout_minutes=15)
     secret = auth.generate_totp_secret()
     async with SessionLocal() as s:
-        s.add(Admin(
-            email=email,
-            password_hash=auth.hash_password(password),
-            totp_secret=secret.encode("utf-8") if enrolled else None,
-            totp_enrolled=enrolled,
-            role=role,
-            disabled=disabled,
-        ))
+        s.add(
+            Admin(
+                email=email,
+                password_hash=auth.hash_password(password),
+                totp_secret=secret.encode("utf-8") if enrolled else None,
+                totp_enrolled=enrolled,
+                role=role,
+                disabled=disabled,
+            )
+        )
         await s.commit()
     return email, secret
 
@@ -49,9 +52,14 @@ async def test_login_happy_path_sets_session_cookie() -> None:
     email, secret = await _seed_admin()
     code = pyotp.TOTP(secret).now()
     async with httpx.AsyncClient(base_url=BASE, verify=False) as c:
-        r = await c.post("/api/admin/login", json={
-            "email": email, "password": "StrongPw123!", "totp_code": code,
-        })
+        r = await c.post(
+            "/api/admin/login",
+            json={
+                "email": email,
+                "password": "StrongPw123!",
+                "totp_code": code,
+            },
+        )
     assert r.status_code == 200
     body = r.json()
     assert body["admin"]["email"] == email
@@ -64,9 +72,14 @@ async def test_login_wrong_password_returns_401() -> None:
     email, secret = await _seed_admin()
     code = pyotp.TOTP(secret).now()
     async with httpx.AsyncClient(base_url=BASE, verify=False) as c:
-        r = await c.post("/api/admin/login", json={
-            "email": email, "password": "wrong", "totp_code": code,
-        })
+        r = await c.post(
+            "/api/admin/login",
+            json={
+                "email": email,
+                "password": "wrong",
+                "totp_code": code,
+            },
+        )
     assert r.status_code == 401
 
 
@@ -75,9 +88,14 @@ async def test_login_wrong_password_returns_401() -> None:
 async def test_login_wrong_totp_returns_401() -> None:
     email, _ = await _seed_admin()
     async with httpx.AsyncClient(base_url=BASE, verify=False) as c:
-        r = await c.post("/api/admin/login", json={
-            "email": email, "password": "StrongPw123!", "totp_code": "000000",
-        })
+        r = await c.post(
+            "/api/admin/login",
+            json={
+                "email": email,
+                "password": "StrongPw123!",
+                "totp_code": "000000",
+            },
+        )
     assert r.status_code == 401
 
 
@@ -85,11 +103,14 @@ async def test_login_wrong_totp_returns_401() -> None:
 @pytest.mark.asyncio
 async def test_login_unknown_user_returns_401() -> None:
     async with httpx.AsyncClient(base_url=BASE, verify=False) as c:
-        r = await c.post("/api/admin/login", json={
-            "email": "nobody@nowhere.co",
-            "password": "whatever",
-            "totp_code": "123456",
-        })
+        r = await c.post(
+            "/api/admin/login",
+            json={
+                "email": "nobody@nowhere.co",
+                "password": "whatever",
+                "totp_code": "123456",
+            },
+        )
     assert r.status_code == 401
 
 
@@ -99,9 +120,14 @@ async def test_login_disabled_admin_returns_403() -> None:
     email, secret = await _seed_admin(disabled=True)
     code = pyotp.TOTP(secret).now()
     async with httpx.AsyncClient(base_url=BASE, verify=False) as c:
-        r = await c.post("/api/admin/login", json={
-            "email": email, "password": "StrongPw123!", "totp_code": code,
-        })
+        r = await c.post(
+            "/api/admin/login",
+            json={
+                "email": email,
+                "password": "StrongPw123!",
+                "totp_code": code,
+            },
+        )
     assert r.status_code == 403
 
 
@@ -110,9 +136,14 @@ async def test_login_disabled_admin_returns_403() -> None:
 async def test_login_not_enrolled_returns_400() -> None:
     email, _ = await _seed_admin(enrolled=False)
     async with httpx.AsyncClient(base_url=BASE, verify=False) as c:
-        r = await c.post("/api/admin/login", json={
-            "email": email, "password": "StrongPw123!", "totp_code": "123456",
-        })
+        r = await c.post(
+            "/api/admin/login",
+            json={
+                "email": email,
+                "password": "StrongPw123!",
+                "totp_code": "123456",
+            },
+        )
     assert r.status_code == 400
 
 
@@ -130,9 +161,14 @@ async def test_me_returns_admin_after_login() -> None:
     email, secret = await _seed_admin()
     code = pyotp.TOTP(secret).now()
     async with httpx.AsyncClient(base_url=BASE, verify=False) as c:
-        login = await c.post("/api/admin/login", json={
-            "email": email, "password": "StrongPw123!", "totp_code": code,
-        })
+        login = await c.post(
+            "/api/admin/login",
+            json={
+                "email": email,
+                "password": "StrongPw123!",
+                "totp_code": code,
+            },
+        )
         assert login.status_code == 200
         me = await c.get("/api/admin/me")
     assert me.status_code == 200
@@ -145,9 +181,14 @@ async def test_logout_destroys_session() -> None:
     email, secret = await _seed_admin()
     code = pyotp.TOTP(secret).now()
     async with httpx.AsyncClient(base_url=BASE, verify=False) as c:
-        await c.post("/api/admin/login", json={
-            "email": email, "password": "StrongPw123!", "totp_code": code,
-        })
+        await c.post(
+            "/api/admin/login",
+            json={
+                "email": email,
+                "password": "StrongPw123!",
+                "totp_code": code,
+            },
+        )
         # Logout is a mutating admin request but exempt from CSRF since user
         # just logged in and the CSRF cookie was already minted by the login
         # response. The SPA reads it from document.cookie. In this test we
@@ -165,21 +206,31 @@ async def test_logout_destroys_session() -> None:
 async def test_lockout_after_5_failed_attempts() -> None:
     email, _ = await _seed_admin()
     async with httpx.AsyncClient(base_url=BASE, verify=False) as c:
-        for i in range(5):
-            await c.post("/api/admin/login", json={
-                "email": email, "password": "wrong", "totp_code": "000000",
-            })
+        for _i in range(5):
+            await c.post(
+                "/api/admin/login",
+                json={
+                    "email": email,
+                    "password": "wrong",
+                    "totp_code": "000000",
+                },
+            )
         # 6th attempt is locked even with correct creds
         from pyotp import TOTP
+
         # Need secret — look it up
         async with SessionLocal() as s:
             from sqlalchemy import select
-            admin = (await s.execute(
-                select(Admin).where(Admin.email == email)
-            )).scalar_one()
+
+            admin = (await s.execute(select(Admin).where(Admin.email == email))).scalar_one()
             secret = admin.totp_secret.decode("utf-8")
         code = TOTP(secret).now()
-        r = await c.post("/api/admin/login", json={
-            "email": email, "password": "StrongPw123!", "totp_code": code,
-        })
+        r = await c.post(
+            "/api/admin/login",
+            json={
+                "email": email,
+                "password": "StrongPw123!",
+                "totp_code": code,
+            },
+        )
         assert r.status_code == 423

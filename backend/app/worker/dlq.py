@@ -17,6 +17,7 @@ Primary failures (handler exceptions) are the main use case. If the DLQ push
 itself fails (e.g. Redis is down), we log and swallow — the worker loop must
 keep running regardless of backend health.
 """
+
 from __future__ import annotations
 
 import json

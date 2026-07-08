@@ -8,10 +8,11 @@ Uses file-mtime-ish heuristic: wait at least `min_age_seconds` after transfer
 creation before declaring a missing file as "disappeared" — since tus clients
 only create the staging file on first PATCH.
 """
+
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -34,21 +35,33 @@ async def run_defender_poll_once(
 
     Returns the number of transfers flipped.
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     cutoff = now - timedelta(seconds=min_age_seconds)
 
-    candidates = (await session.execute(
-        select(Transfer).where(
-            Transfer.status == "uploading",
-            Transfer.created_at < cutoff,
+    candidates = (
+        (
+            await session.execute(
+                select(Transfer).where(
+                    Transfer.status == "uploading",
+                    Transfer.created_at < cutoff,
+                )
+            )
         )
-    )).scalars().all()
+        .scalars()
+        .all()
+    )
 
     flipped = 0
     for transfer in candidates:
-        files = (await session.execute(
-            select(TransferFile).where(TransferFile.transfer_id == transfer.id)
-        )).scalars().all()
+        files = (
+            (
+                await session.execute(
+                    select(TransferFile).where(TransferFile.transfer_id == transfer.id)
+                )
+            )
+            .scalars()
+            .all()
+        )
         missing: list[str] = []
         for f in files:
             path = staging.file_path(transfer.id, f.id, f.safe_filename)
@@ -66,14 +79,16 @@ async def run_defender_poll_once(
 
         transfer.status = "infected"
         transfer.infected_at = now
-        session.add(AuditLog(
-            ts=now,
-            event_type="defender_quarantine",
-            severity="critical",
-            transfer_id=transfer.id,
-            ip=str(transfer.sender_ip),
-            details={"missing_files": missing},
-        ))
+        session.add(
+            AuditLog(
+                ts=now,
+                event_type="defender_quarantine",
+                severity="critical",
+                transfer_id=transfer.id,
+                ip=str(transfer.sender_ip),
+                details={"missing_files": missing},
+            )
+        )
         flipped += 1
 
     if flipped == 0:

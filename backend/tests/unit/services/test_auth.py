@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock
 
 import pyotp
@@ -93,13 +93,13 @@ def test_register_failure_locks_at_threshold(auth: AuthService) -> None:
     auth.register_failure(admin)
     assert admin.failed_attempts == 3
     assert admin.locked_until is not None
-    assert admin.locked_until > datetime.now(timezone.utc)
+    assert admin.locked_until > datetime.now(UTC)
 
 
 def test_reset_failures(auth: AuthService) -> None:
     admin = MagicMock(
         failed_attempts=3,
-        locked_until=datetime.now(timezone.utc) + timedelta(minutes=5),
+        locked_until=datetime.now(UTC) + timedelta(minutes=5),
     )
     auth.reset_failures(admin)
     assert admin.failed_attempts == 0
@@ -107,12 +107,12 @@ def test_reset_failures(auth: AuthService) -> None:
 
 
 def test_is_locked_true_when_locked_until_in_future(auth: AuthService) -> None:
-    admin = MagicMock(locked_until=datetime.now(timezone.utc) + timedelta(minutes=1))
+    admin = MagicMock(locked_until=datetime.now(UTC) + timedelta(minutes=1))
     assert auth.is_locked(admin) is True
 
 
 def test_is_locked_false_when_expired(auth: AuthService) -> None:
-    admin = MagicMock(locked_until=datetime.now(timezone.utc) - timedelta(minutes=1))
+    admin = MagicMock(locked_until=datetime.now(UTC) - timedelta(minutes=1))
     assert auth.is_locked(admin) is False
 
 

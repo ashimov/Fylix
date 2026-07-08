@@ -1,11 +1,10 @@
-from datetime import timedelta
 from uuid import uuid4
 
 import pytest
 from redis.asyncio import Redis
 from testcontainers.redis import RedisContainer  # type: ignore[import-untyped]
 
-from app.services.session import SessionData, SessionStore
+from app.services.session import SessionStore
 
 
 @pytest.fixture(scope="module")

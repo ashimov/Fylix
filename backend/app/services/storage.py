@@ -4,10 +4,12 @@ Stores ciphertext blobs keyed by `{transfer_id}/{file_id}.enc`.
 Reads are streamed (decrypt happens in the caller using AES-GCM
 from app.crypto.stream — not here). Writes are atomic per-object.
 """
+
 from __future__ import annotations
 
 import io
 from collections.abc import Iterable, Iterator
+from typing import IO
 from uuid import UUID
 
 from minio import Minio
@@ -34,9 +36,7 @@ class StorageService:
         secure: bool = True,
     ) -> None:
         self.bucket = bucket
-        self._client = Minio(
-            endpoint, access_key=access_key, secret_key=secret_key, secure=secure
-        )
+        self._client = Minio(endpoint, access_key=access_key, secret_key=secret_key, secure=secure)
 
     def ensure_bucket(self) -> None:
         if not self._client.bucket_exists(self.bucket):
@@ -63,17 +63,17 @@ class StorageService:
         self._client.put_object(
             self.bucket,
             key,
-            data=_IteratorIO(iter(stream)),
+            data=_IteratorIO(iter(stream)),  # type: ignore[arg-type]  # duck-typed file-like
             length=length,
             content_type="application/octet-stream",
         )
 
-    def put_file(self, key: str, fileobj, length: int) -> None:
+    def put_file(self, key: str, fileobj: IO[bytes], length: int) -> None:
         """Upload from a file-like with .read(n) and known length."""
         self._client.put_object(
             self.bucket,
             key,
-            data=fileobj,
+            data=fileobj,  # type: ignore[arg-type]  # IO[bytes] satisfies the read(n) use
             length=length,
             content_type="application/octet-stream",
         )
@@ -86,8 +86,7 @@ class StorageService:
                 raise ObjectNotFound(key) from e
             raise
         try:
-            for chunk in resp.stream(64 * 1024):
-                yield chunk
+            yield from resp.stream(64 * 1024)
         finally:
             resp.close()
             resp.release_conn()
@@ -96,15 +95,11 @@ class StorageService:
         self._client.remove_object(self.bucket, key)
 
     def list_transfer_keys(self, transfer_id: UUID) -> Iterator[str]:
-        for obj in self._client.list_objects(
-            self.bucket, prefix=f"{transfer_id}/", recursive=True
-        ):
+        for obj in self._client.list_objects(self.bucket, prefix=f"{transfer_id}/", recursive=True):
             yield obj.object_name
 
     def delete_transfer(self, transfer_id: UUID) -> None:
-        objects_to_delete = (
-            DeleteObject(name) for name in self.list_transfer_keys(transfer_id)
-        )
+        objects_to_delete = (DeleteObject(name) for name in self.list_transfer_keys(transfer_id))
         errors = list(self._client.remove_objects(self.bucket, objects_to_delete))
         if errors:
             raise StorageError(f"delete errors: {errors}")
@@ -120,7 +115,7 @@ class _IteratorIO(io.RawIOBase):
     def readable(self) -> bool:
         return True
 
-    def readinto(self, b) -> int:  # type: ignore[override]
+    def readinto(self, b: bytearray) -> int:  # type: ignore[override]
         while not self._buf:
             try:
                 self._buf = next(self._it)

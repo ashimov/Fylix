@@ -1,12 +1,13 @@
 """Sender panel: view, delete, revoke."""
+
 import asyncio
 import os
+from urllib.parse import urlparse
 from uuid import UUID
 
 import httpx
 import pytest
 from sqlalchemy import select, text
-from urllib.parse import urlparse
 
 from app.config import settings as app_settings
 from app.db import SessionLocal
@@ -18,21 +19,26 @@ BASE = os.environ.get("PUBLIC_URL", "http://localhost:8000")
 @pytest.fixture(autouse=True)
 async def _clean_state() -> None:
     import shutil
+
     async with SessionLocal() as session:
-        await session.execute(text(
-            "TRUNCATE TABLE transfers, transfer_recipients, transfer_files, "
-            "downloads, audit_log RESTART IDENTITY CASCADE"
-        ))
+        await session.execute(
+            text(
+                "TRUNCATE TABLE transfers, transfer_recipients, transfer_files, "
+                "downloads, audit_log RESTART IDENTITY CASCADE"
+            )
+        )
         await session.commit()
     shutil.rmtree(app_settings.staging_dir, ignore_errors=True)
     app_settings.staging_dir.mkdir(parents=True, exist_ok=True)
 
     from redis.asyncio import Redis
+
     r = Redis.from_url(app_settings.redis_url)
     await r.delete("upload:ready")
     await r.aclose()
 
     from app.services.storage import StorageService
+
     storage = StorageService(
         endpoint=app_settings.minio_endpoint,
         access_key=app_settings.minio_root_user,
@@ -89,9 +95,14 @@ async def test_sender_panel_returns_transfer_details_and_downloads() -> None:
         # download once so there is a Download row
         async with SessionLocal() as session:
             from app.models import TransferFile
-            f = (await session.execute(
-                select(TransferFile).where(TransferFile.transfer_id == UUID(body["transfer_id"]))
-            )).scalar_one()
+
+            f = (
+                await session.execute(
+                    select(TransferFile).where(
+                        TransferFile.transfer_id == UUID(body["transfer_id"])
+                    )
+                )
+            ).scalar_one()
             file_id = f.id
         await c.get(f"/t/{body['download_token']}/file/{file_id}")
 
@@ -144,9 +155,11 @@ async def test_sender_delete_crypto_shreds_and_denies_download() -> None:
         assert t.wrapped_key is None
         assert t.deleted_at is not None
         # Audit
-        audits = (await session.execute(
-            select(AuditLog).where(AuditLog.event_type == "sender_delete")
-        )).scalars().all()
+        audits = (
+            (await session.execute(select(AuditLog).where(AuditLog.event_type == "sender_delete")))
+            .scalars()
+            .all()
+        )
         assert len(audits) == 1
 
 

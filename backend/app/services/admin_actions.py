@@ -1,7 +1,8 @@
 """Helper for immutable admin-action logging."""
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
@@ -21,12 +22,14 @@ async def record(
     details: dict[str, Any] | None = None,
 ) -> None:
     """Insert an AdminAction row. Caller commits the session."""
-    session.add(AdminAction(
-        ts=datetime.now(timezone.utc),
-        admin_id=admin_id,
-        action=action,
-        target_type=target_type,
-        target_id=target_id,
-        ip=ip,
-        details=details,
-    ))
+    session.add(
+        AdminAction(
+            ts=datetime.now(UTC),
+            admin_id=admin_id,
+            action=action,
+            target_type=target_type,
+            target_id=target_id,
+            ip=ip,
+            details=details,
+        )
+    )

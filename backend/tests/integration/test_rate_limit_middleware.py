@@ -1,4 +1,5 @@
 """POST /api/transfers rate-limit at 10/hour (default) — 11th request is 429."""
+
 import os
 from uuid import uuid4
 
@@ -68,23 +69,30 @@ async def _seed_admin_for_rl() -> tuple[str, str]:
     secret = auth.generate_totp_secret()
     email = f"rl_admin_{uuid4().hex[:6]}@test.co"
     async with SessionLocal() as s:
-        s.add(Admin(
-            email=email,
-            password_hash=auth.hash_password("StrongPw123!"),
-            totp_secret=secret.encode("utf-8"),
-            totp_enrolled=True,
-            role="admin",
-            disabled=False,
-        ))
+        s.add(
+            Admin(
+                email=email,
+                password_hash=auth.hash_password("StrongPw123!"),
+                totp_secret=secret.encode("utf-8"),
+                totp_enrolled=True,
+                role="admin",
+                disabled=False,
+            )
+        )
         await s.commit()
     return email, secret
 
 
 async def _admin_login(c: httpx.AsyncClient, email: str, secret: str) -> str:
     code = pyotp.TOTP(secret).now()
-    r = await c.post("/api/admin/login", json={
-        "email": email, "password": "StrongPw123!", "totp_code": code,
-    })
+    r = await c.post(
+        "/api/admin/login",
+        json={
+            "email": email,
+            "password": "StrongPw123!",
+            "totp_code": code,
+        },
+    )
     assert r.status_code == 200, r.text
     return c.cookies.get("csrf") or ""
 

@@ -6,6 +6,7 @@ DB separately from MaxMind.
 
 The class is thread-safe for reads.
 """
+
 from __future__ import annotations
 
 import logging

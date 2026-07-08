@@ -22,6 +22,7 @@ Typical flow:
                                                                run_consumer_iteration
                                                                logs carry rid
 """
+
 from __future__ import annotations
 
 from contextvars import ContextVar, Token

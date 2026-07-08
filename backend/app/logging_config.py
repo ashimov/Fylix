@@ -17,6 +17,7 @@ Standard fields:
 Keeping zero external deps: no python-json-logger, no structlog. 30
 lines of stdlib is the right trade vs one more supply-chain hop.
 """
+
 from __future__ import annotations
 
 import json
@@ -31,12 +32,33 @@ from app.context import current_request_id
 # either because they're internal plumbing (args, msg, exc_text) or because
 # they're noise (pathname, thread/process ids). Keep the schema minimal so
 # log shippers don't index thousands of useless fields.
-_RESERVED: frozenset[str] = frozenset({
-    "args", "asctime", "created", "exc_info", "exc_text", "filename",
-    "funcName", "levelname", "levelno", "lineno", "message", "module",
-    "msecs", "msg", "name", "pathname", "process", "processName",
-    "relativeCreated", "stack_info", "thread", "threadName", "taskName",
-})
+_RESERVED: frozenset[str] = frozenset(
+    {
+        "args",
+        "asctime",
+        "created",
+        "exc_info",
+        "exc_text",
+        "filename",
+        "funcName",
+        "levelname",
+        "levelno",
+        "lineno",
+        "message",
+        "module",
+        "msecs",
+        "msg",
+        "name",
+        "pathname",
+        "process",
+        "processName",
+        "relativeCreated",
+        "stack_info",
+        "thread",
+        "threadName",
+        "taskName",
+    }
+)
 
 
 class JsonFormatter(logging.Formatter):
@@ -44,8 +66,7 @@ class JsonFormatter(logging.Formatter):
 
     def format(self, record: logging.LogRecord) -> str:
         payload: dict[str, Any] = {
-            "ts": datetime.fromtimestamp(record.created, tz=UTC)
-            .isoformat(timespec="milliseconds"),
+            "ts": datetime.fromtimestamp(record.created, tz=UTC).isoformat(timespec="milliseconds"),
             "level": record.levelname,
             "logger": record.name,
             "msg": record.getMessage(),

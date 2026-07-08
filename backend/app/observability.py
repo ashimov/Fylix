@@ -23,6 +23,7 @@ Auto-instrumented libraries:
   webhooks. Minio SDK uses urllib3 directly (no httpx), so object-
   storage I/O is not traced here — we rely on our own manual spans.
 """
+
 from __future__ import annotations
 
 import logging

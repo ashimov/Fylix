@@ -51,9 +51,7 @@ def test_unwrap_with_previous_key_falls_back_when_current_wrong() -> None:
     # the master key was rotated — new current is fresh, old is available as
     # previous for the transition window.
     wrapped = wrap_key(previous_master, file_key)
-    recovered = unwrap_key(
-        current_master, wrapped, previous_master_key=previous_master
-    )
+    recovered = unwrap_key(current_master, wrapped, previous_master_key=previous_master)
     assert recovered == file_key
 
 
@@ -63,9 +61,7 @@ def test_unwrap_prefers_current_when_both_valid() -> None:
     file_key = os.urandom(32)
     wrapped = wrap_key(current_master, file_key)
     # Should succeed via current without ever touching the previous.
-    recovered = unwrap_key(
-        current_master, wrapped, previous_master_key=previous_master
-    )
+    recovered = unwrap_key(current_master, wrapped, previous_master_key=previous_master)
     assert recovered == file_key
 
 

@@ -6,10 +6,10 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
-
 # ---------------------------------------------------------------------------
 # Settings: typed partial-update DTO
 # ---------------------------------------------------------------------------
+
 
 class PatchSettingsRequest(BaseModel):
     """Typed body for PATCH /api/admin/settings.
@@ -58,6 +58,7 @@ class PatchSettingsRequest(BaseModel):
 # Admins CRUD schemas
 # ---------------------------------------------------------------------------
 
+
 class AdminRow(BaseModel):
     id: UUID
     email: str
@@ -93,6 +94,7 @@ class ResetTotpResponse(BaseModel):
 # ---------------------------------------------------------------------------
 # Telegram config schemas
 # ---------------------------------------------------------------------------
+
 
 class TelegramConfig(BaseModel):
     bot_token_is_set: bool
@@ -138,6 +140,7 @@ class LoginResponse(BaseModel):
 # ---------------------------------------------------------------------------
 # Transfer schemas
 # ---------------------------------------------------------------------------
+
 
 class TransferRow(BaseModel):
     id: UUID
@@ -203,6 +206,7 @@ class TransferDetailResponse(BaseModel):
 # Blocklist schemas
 # ---------------------------------------------------------------------------
 
+
 class BlocklistEntry(BaseModel):
     value: str
     reason: str | None
@@ -220,6 +224,7 @@ class BlocklistAddRequest(BaseModel):
 # Audit / admin-actions schemas
 # ---------------------------------------------------------------------------
 
+
 class AuditRow(BaseModel):
     id: int
     ts: datetime
@@ -229,7 +234,7 @@ class AuditRow(BaseModel):
     country: str | None
     transfer_id: UUID | None
     admin_id: UUID | None
-    details: dict | None
+    details: dict[str, Any] | None
 
 
 class AuditListResponse(BaseModel):
@@ -245,7 +250,7 @@ class AdminActionRow(BaseModel):
     target_type: str | None
     target_id: str | None
     ip: str | None
-    details: dict | None
+    details: dict[str, Any] | None
 
 
 class AdminActionListResponse(BaseModel):
@@ -256,6 +261,7 @@ class AdminActionListResponse(BaseModel):
 # ---------------------------------------------------------------------------
 # Analytics schemas
 # ---------------------------------------------------------------------------
+
 
 class KPI(BaseModel):
     active_transfers: int

@@ -3,18 +3,20 @@
 Uses Postgres `<<=` operator for CIDR containment. Domain and email lookups
 are against citext columns so they're naturally case-insensitive.
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from typing import Any
 
-from sqlalchemy import or_, select
+from sqlalchemy import ColumnElement, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import BlocklistEmail, BlocklistEmailDomain, BlocklistIP
 
 
-def _not_expired(model):
-    now = datetime.now(timezone.utc)
+def _not_expired(model: Any) -> ColumnElement[bool]:
+    now = datetime.now(UTC)
     return or_(model.expires_at.is_(None), model.expires_at > now)
 
 
@@ -29,8 +31,7 @@ class BlocklistChecker:
 
         ip_cast = cast(ip, INET)
         result = await session.execute(
-            select(BlocklistIP.cidr)
-            .where(
+            select(BlocklistIP.cidr).where(
                 ip_cast.op("<<=")(BlocklistIP.cidr),
                 _not_expired(BlocklistIP),
             )

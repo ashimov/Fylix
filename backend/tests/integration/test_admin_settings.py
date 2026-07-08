@@ -1,4 +1,5 @@
 """Admin settings + extensions endpoints."""
+
 from __future__ import annotations
 
 import os
@@ -31,23 +32,30 @@ async def _seed_admin(role: str = "admin") -> tuple[str, str]:
     secret = auth.generate_totp_secret()
     email = f"{role}_{uuid4().hex[:6]}@test.co"
     async with SessionLocal() as s:
-        s.add(Admin(
-            email=email,
-            password_hash=auth.hash_password("StrongPw123!"),
-            totp_secret=secret.encode("utf-8"),
-            totp_enrolled=True,
-            role=role,
-            disabled=False,
-        ))
+        s.add(
+            Admin(
+                email=email,
+                password_hash=auth.hash_password("StrongPw123!"),
+                totp_secret=secret.encode("utf-8"),
+                totp_enrolled=True,
+                role=role,
+                disabled=False,
+            )
+        )
         await s.commit()
     return email, secret
 
 
 async def _login(c: httpx.AsyncClient, email: str, secret: str) -> str:
     code = pyotp.TOTP(secret).now()
-    r = await c.post("/api/admin/login", json={
-        "email": email, "password": "StrongPw123!", "totp_code": code,
-    })
+    r = await c.post(
+        "/api/admin/login",
+        json={
+            "email": email,
+            "password": "StrongPw123!",
+            "totp_code": code,
+        },
+    )
     assert r.status_code == 200, r.text
     return c.cookies.get("csrf") or ""
 
@@ -72,9 +80,9 @@ async def test_patch_settings_updates_value() -> None:
     email, secret = await _seed_admin()
     async with httpx.AsyncClient(base_url=BASE) as c:
         csrf = await _login(c, email, secret)
-        r = await c.patch("/api/admin/settings",
-                          json={"max_recipients": 25},
-                          headers={"X-CSRF-Token": csrf})
+        r = await c.patch(
+            "/api/admin/settings", json={"max_recipients": 25}, headers={"X-CSRF-Token": csrf}
+        )
     assert r.status_code == 200
     assert r.json()["max_recipients"] == 25
 
@@ -90,15 +98,18 @@ async def test_patch_settings_records_admin_action() -> None:
     email, secret = await _seed_admin()
     async with httpx.AsyncClient(base_url=BASE) as c:
         csrf = await _login(c, email, secret)
-        await c.patch("/api/admin/settings",
-                      json={"max_ttl_days": 14},
-                      headers={"X-CSRF-Token": csrf})
+        await c.patch(
+            "/api/admin/settings", json={"max_ttl_days": 14}, headers={"X-CSRF-Token": csrf}
+        )
 
     async with SessionLocal() as s:
         from sqlalchemy import select
-        actions = (await s.execute(
-            select(AdminAction).where(AdminAction.action == "update_setting")
-        )).scalars().all()
+
+        actions = (
+            (await s.execute(select(AdminAction).where(AdminAction.action == "update_setting")))
+            .scalars()
+            .all()
+        )
         assert len(actions) >= 1
         assert actions[0].target_id == "max_ttl_days"
 
@@ -109,9 +120,9 @@ async def test_patch_settings_unknown_key_returns_400() -> None:
     email, secret = await _seed_admin()
     async with httpx.AsyncClient(base_url=BASE) as c:
         csrf = await _login(c, email, secret)
-        r = await c.patch("/api/admin/settings",
-                          json={"secret_backdoor": "evil"},
-                          headers={"X-CSRF-Token": csrf})
+        r = await c.patch(
+            "/api/admin/settings", json={"secret_backdoor": "evil"}, headers={"X-CSRF-Token": csrf}
+        )
     # PatchSettingsRequest uses pydantic `extra="forbid"` — validation
     # rejects unknown keys with 422, not the old custom 400.
     assert r.status_code == 422
@@ -135,9 +146,9 @@ async def test_viewer_cannot_patch_settings() -> None:
     email, secret = await _seed_admin(role="viewer")
     async with httpx.AsyncClient(base_url=BASE) as c:
         csrf = await _login(c, email, secret)
-        r = await c.patch("/api/admin/settings",
-                          json={"max_recipients": 5},
-                          headers={"X-CSRF-Token": csrf})
+        r = await c.patch(
+            "/api/admin/settings", json={"max_recipients": 5}, headers={"X-CSRF-Token": csrf}
+        )
     assert r.status_code == 403
 
 
@@ -158,9 +169,9 @@ async def test_post_extension_adds_to_list() -> None:
     email, secret = await _seed_admin()
     async with httpx.AsyncClient(base_url=BASE) as c:
         csrf = await _login(c, email, secret)
-        r = await c.post("/api/admin/extensions",
-                         json={"extension": ".exe"},
-                         headers={"X-CSRF-Token": csrf})
+        r = await c.post(
+            "/api/admin/extensions", json={"extension": ".exe"}, headers={"X-CSRF-Token": csrf}
+        )
     assert r.status_code == 201
     assert ".exe" in r.json()
 
@@ -176,11 +187,10 @@ async def test_delete_extension_removes_from_list() -> None:
     email, secret = await _seed_admin()
     async with httpx.AsyncClient(base_url=BASE) as c:
         csrf = await _login(c, email, secret)
-        await c.post("/api/admin/extensions",
-                     json={"extension": ".bat"},
-                     headers={"X-CSRF-Token": csrf})
-        r = await c.delete("/api/admin/extensions/.bat",
-                           headers={"X-CSRF-Token": csrf})
+        await c.post(
+            "/api/admin/extensions", json={"extension": ".bat"}, headers={"X-CSRF-Token": csrf}
+        )
+        r = await c.delete("/api/admin/extensions/.bat", headers={"X-CSRF-Token": csrf})
     assert r.status_code == 204
 
     async with SessionLocal() as s:
@@ -195,7 +205,9 @@ async def test_post_extension_invalid_format_returns_400() -> None:
     email, secret = await _seed_admin()
     async with httpx.AsyncClient(base_url=BASE) as c:
         csrf = await _login(c, email, secret)
-        r = await c.post("/api/admin/extensions",
-                         json={"extension": "exe"},  # missing leading dot
-                         headers={"X-CSRF-Token": csrf})
+        r = await c.post(
+            "/api/admin/extensions",
+            json={"extension": "exe"},  # missing leading dot
+            headers={"X-CSRF-Token": csrf},
+        )
     assert r.status_code == 400

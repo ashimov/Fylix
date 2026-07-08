@@ -1,8 +1,10 @@
 """Consume email:queue and send via SmtpSender."""
+
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,7 +17,7 @@ log = logging.getLogger(__name__)
 
 async def process_email_job(
     *,
-    job: dict,
+    job: dict[str, Any],
     session: AsyncSession,
     sender: SmtpSender,
 ) -> None:
@@ -42,7 +44,7 @@ async def process_email_job(
             if r is not None:
                 r.email_status = status
                 if status == "sent":
-                    r.email_sent_at = datetime.now(timezone.utc)
+                    r.email_sent_at = datetime.now(UTC)
                 await session.commit()
         except Exception:
             log.exception("email: failed to update recipient %s", recipient_id)

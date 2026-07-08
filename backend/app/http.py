@@ -29,6 +29,7 @@ Bootstrap from ``app.main`` by calling ``install_hawkapi_shims()`` before
 any ``Router`` is constructed (in practice, before ``from app.routers
 import *``).
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -67,9 +68,7 @@ class HTTPException(_HawkHTTPException):
         *,
         headers: dict[str, str] | None = None,
     ) -> None:
-        str_detail = detail if isinstance(detail, str) else (
-            "" if detail is None else str(detail)
-        )
+        str_detail = detail if isinstance(detail, str) else ("" if detail is None else str(detail))
         super().__init__(status_code, detail=str_detail, headers=headers)
         # Parent stores `str_detail` on `.detail` (its declared type is str);
         # we re-assign the original object so callers that read `exc.detail`
@@ -197,12 +196,15 @@ def install_cookie_support() -> None:
 
 # --- Router method aliases --------------------------------------------------
 
+
 def _make_method_decorator(method_name: str):
     def decorator_factory(self: Router, path: str, **kwargs: Any):
         def decorator(fn):
             self.add_route(path, fn, methods={method_name}, **kwargs)
             return fn
+
         return decorator
+
     decorator_factory.__name__ = method_name.lower()
     return decorator_factory
 
@@ -234,6 +236,7 @@ def install_post_default_status() -> None:
 
 
 # --- Pydantic-aware msgspec encoder hook -----------------------------------
+
 
 def install_pydantic_encoder_hook() -> None:
     """Teach HawkAPI's msgspec encoder how to serialize Pydantic models.
@@ -274,6 +277,7 @@ def install_pydantic_encoder_hook() -> None:
 
 
 # --- Pydantic ValidationError -> HawkAPI RequestValidationError -----------
+
 
 def install_pydantic_validation_hook() -> None:
     """Translate ``pydantic.ValidationError`` into HawkAPI's
@@ -316,6 +320,7 @@ def install_pydantic_validation_hook() -> None:
     # Other modules may have already done `from ... import decode_pydantic`
     # at import time — patch those call-sites too.
     from hawkapi.di import resolver as _resolver
+
     if hasattr(_resolver, "decode_pydantic"):
         _resolver.decode_pydantic = patched
     pydantic_adapter._fylix_validation_patched = True
@@ -357,6 +362,7 @@ def install_validation_error_renderer() -> None:
 
 # --- Streaming-response passthrough ----------------------------------------
 
+
 def install_streaming_response_passthrough() -> None:
     """Treat ``StreamingResponse`` as a direct response in ``_build_response``.
 
@@ -383,6 +389,7 @@ def install_streaming_response_passthrough() -> None:
 
 
 # --- Pydantic response_model support ---------------------------------------
+
 
 def install_response_model_hook() -> None:
     """Accept Pydantic ``BaseModel`` returns when a route declares

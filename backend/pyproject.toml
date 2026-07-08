@@ -5,12 +5,12 @@ description = "Fylix backend — HawkAPI + worker"
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "argon2-cffi==23.1.*",
-    "aiohttp==3.10.*",
-    "aiosmtplib==3.0.*",
+    "aiohttp==3.14.*",
+    "aiosmtplib==5.1.*",
     "alembic==1.13.*",
     "apscheduler==3.10.*",
     "asyncpg==0.30.*",
-    "cryptography==43.0.*",
+    "cryptography==48.0.*",
     "email-validator==2.2.*",
     "hawkapi[pydantic,otel]>=0.1.5,<0.2",
     # OTLP gRPC exporter + auto-instrumentation for the deps hawkapi doesn't
@@ -54,10 +54,21 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "S", "A", "C4", "SIM", "PL"]
-ignore = ["S101"]  # allow asserts in tests
+ignore = [
+    "S101",    # allow asserts in tests
+    "B008",    # Depends()-style calls in handler defaults are the framework idiom
+    "PLR0913", # handlers/services legitimately take many injected arguments
+    "PLR0915", # a few long orchestration functions are clearer unsplit
+    "PLR2004", # HTTP codes / small protocol constants read fine inline
+    "PLW0603", # process-wide singletons (settings, clients) use module globals
+]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["S105", "S106", "PLR2004", "S501", "E501"]
+"tests/**" = ["S104", "S105", "S106", "S107", "S110", "S603", "PLR2004", "S501", "E501", "SIM105"]
+# Module-level wiring (loggers, disconnect-exception tables) intentionally
+# sits between import groups.
+"app/routers/public.py" = ["E402"]
+"scripts/create_admin.py" = ["E402"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
@@ -78,6 +89,14 @@ filterwarnings = [
 python_version = "3.12"
 strict = true
 ignore_missing_imports = true
+
+# Known typing debt, tracked for gradual re-enablement:
+#   - app.routers.*: hawkapi's Depends()-in-default idiom fails strict
+#     [assignment]; the status module and Router.head lack stubs.
+#   - app.http: deliberate runtime monkey-patching of hawkapi internals.
+[[tool.mypy.overrides]]
+module = ["app.routers.admin", "app.routers.public", "app.http"]
+ignore_errors = true
 
 [tool.bandit]
 exclude_dirs = ["tests", "alembic"]

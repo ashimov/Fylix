@@ -1,4 +1,5 @@
 """Metrics endpoint — Prometheus exposition + worker queue depth gauge."""
+
 from __future__ import annotations
 
 from collections.abc import Iterator

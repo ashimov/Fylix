@@ -1,4 +1,5 @@
 """Downloading a file enqueues a notice email to the sender."""
+
 import asyncio
 import os
 import shutil
@@ -13,7 +14,6 @@ from app.db import SessionLocal
 
 from .conftest import needs_mailpit
 
-
 BASE = os.environ.get("PUBLIC_URL", "http://localhost:8000")
 MAILPIT_API = os.environ.get("MAILPIT_URL", "http://mailpit:8025")
 
@@ -21,15 +21,18 @@ MAILPIT_API = os.environ.get("MAILPIT_URL", "http://mailpit:8025")
 @pytest.fixture(autouse=True)
 async def _reset_all() -> None:
     async with SessionLocal() as session:
-        await session.execute(text(
-            "TRUNCATE TABLE transfers, transfer_recipients, transfer_files, "
-            "downloads, audit_log RESTART IDENTITY CASCADE"
-        ))
+        await session.execute(
+            text(
+                "TRUNCATE TABLE transfers, transfer_recipients, transfer_files, "
+                "downloads, audit_log RESTART IDENTITY CASCADE"
+            )
+        )
         await session.commit()
     shutil.rmtree(app_settings.staging_dir, ignore_errors=True)
     app_settings.staging_dir.mkdir(parents=True, exist_ok=True)
 
     from redis.asyncio import Redis
+
     r = Redis.from_url(app_settings.redis_url)
     await r.delete("upload:ready")
     await r.delete("email:queue")
@@ -48,12 +51,15 @@ async def _reset_all() -> None:
 async def test_download_sends_notice_to_sender() -> None:
     async with httpx.AsyncClient(base_url=BASE, verify=False) as c:
         # Create transfer
-        resp = await c.post("/api/transfers", json={
-            "sender_email": "alice@example.com",
-            "recipient_emails": ["bob@x.co"],
-            "ttl_days": 1,
-            "files": [{"filename": "f.txt", "size": 5}],
-        })
+        resp = await c.post(
+            "/api/transfers",
+            json={
+                "sender_email": "alice@example.com",
+                "recipient_emails": ["bob@x.co"],
+                "ttl_days": 1,
+                "files": [{"filename": "f.txt", "size": 5}],
+            },
+        )
         assert resp.status_code == 201
         body = resp.json()
         download_token = body["download_token"]

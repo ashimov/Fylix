@@ -6,15 +6,16 @@
   ±1 step clock skew tolerance.
 - Failure counter / lockout helpers that mutate Admin ORM instances.
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from urllib.parse import quote
 
 import pyotp
 from argon2 import PasswordHasher
-from argon2.exceptions import VerifyMismatchError, InvalidHashError, VerificationError
+from argon2.exceptions import InvalidHashError, VerificationError, VerifyMismatchError
 
 _DUMMY_INPUT = "dummy-password-for-constant-time"
 
@@ -101,9 +102,7 @@ class AuthService:
     def register_failure(self, admin: Any) -> None:
         admin.failed_attempts = (admin.failed_attempts or 0) + 1
         if admin.failed_attempts >= self.max_failed_attempts:
-            admin.locked_until = datetime.now(timezone.utc) + timedelta(
-                minutes=self.lockout_minutes
-            )
+            admin.locked_until = datetime.now(UTC) + timedelta(minutes=self.lockout_minutes)
 
     def reset_failures(self, admin: Any) -> None:
         admin.failed_attempts = 0
@@ -112,7 +111,7 @@ class AuthService:
     def is_locked(self, admin: Any) -> bool:
         if admin.locked_until is None:
             return False
-        return admin.locked_until > datetime.now(timezone.utc)
+        return bool(admin.locked_until > datetime.now(UTC))
 
 
 # ---------------------------------------------------------------------------
@@ -128,8 +127,8 @@ from cryptography.hazmat.primitives.keywrap import (  # noqa: E402
 from app.crypto.envelope import EnvelopeError  # noqa: E402
 
 _MASTER_KEY_LEN = 32
-_TOTP_BLOCK = 40   # plaintext block size (must be multiple of 8 for AES-KW)
-_TOTP_WRAPPED = _TOTP_BLOCK + 8   # 48 bytes — AES-KW output
+_TOTP_BLOCK = 40  # plaintext block size (must be multiple of 8 for AES-KW)
+_TOTP_WRAPPED = _TOTP_BLOCK + 8  # 48 bytes — AES-KW output
 _TOTP_SECRET_MAX = _TOTP_BLOCK - 1  # 39 bytes available for the secret
 
 
@@ -175,9 +174,7 @@ def unwrap_totp_secret(
         padded = aes_key_unwrap(master_key, wrapped)
     except InvalidUnwrap:
         if previous_master_key is None:
-            raise EnvelopeError(
-                "TOTP unwrap failed (wrong master key or tampered)"
-            ) from None
+            raise EnvelopeError("TOTP unwrap failed (wrong master key or tampered)") from None
         try:
             padded = aes_key_unwrap(previous_master_key, wrapped)
         except InvalidUnwrap as e:
@@ -200,8 +197,8 @@ def is_wrapped_totp(data: bytes) -> bool:
 # Telegram bot token envelope helpers (AES-KW via RFC 3394)
 # ---------------------------------------------------------------------------
 
-_TG_BLOCK = 256   # plaintext block size (must be multiple of 8 for AES-KW)
-_TG_WRAPPED = _TG_BLOCK + 8   # 264 bytes — AES-KW output
+_TG_BLOCK = 256  # plaintext block size (must be multiple of 8 for AES-KW)
+_TG_WRAPPED = _TG_BLOCK + 8  # 264 bytes — AES-KW output
 _TG_TOKEN_MAX = _TG_BLOCK - 1  # 255 bytes available for the token
 
 
